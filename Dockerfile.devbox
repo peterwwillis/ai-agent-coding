@@ -47,8 +47,8 @@ ENV PATH="/root/.local/share/mise/shims:/root/.local/bin:${PATH}"
 
 # Install language runtimes via mise.
 # Note: Copilot CLI requires Node.js 22+ for npm install path. :contentReference[oaicite:7]{index=7}
-RUN mise install -y node@22 python@3.12 temurin@21 \
-  && mise use -g node@22 python@3.12 temurin@21
+RUN mise install -y node@22 python@3.12 java@temurin-21 \
+  && mise use -g node@22 python@3.12 java@temurin-21
 
 # ---- Android SDK (cmdline-tools + platform-tools + emulator) ----
 ENV ANDROID_SDK_ROOT=/opt/android-sdk \
