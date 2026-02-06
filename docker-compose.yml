@@ -25,6 +25,24 @@ services:
     command: >
       /bin/sh -lc "npx -y playwright@1.49.0 run-server --port 3000 --host 0.0.0.0"
 
+  android-emulator:
+    image: budtmo/docker-android:emulator_14.0
+    privileged: true
+    devices:
+      - /dev/kvm
+    environment:
+      - EMULATOR_DEVICE=Samsung Galaxy S10
+      - WEB_VNC=true
+    networks:
+      - dind-lab
+    ports:
+      - "6080:6080"
+      - "5554:5554"
+      - "5555:5555"
+    volumes:
+      - android-data:/home/androidusr
+    shm_size: "2gb"
+
 #  app:
 #    image: node:22
 #    working_dir: /workspace
@@ -40,3 +58,6 @@ services:
 networks:
   dind-lab:
     external: true
+
+volumes:
+  android-data:
