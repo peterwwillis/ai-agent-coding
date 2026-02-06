@@ -1,0 +1,99 @@
+# Dockerfile.devbox
+# Heavy "AI coding devbox" image: Ubuntu + toolchains + Android SDK + common CLIs
+
+# Optional: use Playwright image as a donor for preinstalled browsers
+# Pin this tag to match the Playwright version you want.
+FROM mcr.microsoft.com/playwright:v1.58.0-noble AS playwright_browsers
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Etc/UTC
+
+# ---- Base dev tools (C/C++/build), networking, convenience ----
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl wget git openssh-client gnupg lsb-release \
+    build-essential clang cmake ninja-build pkg-config \
+    gdb lldb strace \
+    unzip zip xz-utils \
+    jq ripgrep fd-find fzf \
+    tmux vim nano \
+    python3 python3-pip python3-venv \
+    # Android emulator + Playwright runtime deps that are commonly needed
+    libnss3 libnspr4 libasound2t64 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+    libxrandr2 libgbm1 libgtk-3-0 libpango-1.0-0 libcairo2 \
+    libx11-xcb1 libxcb1 libxext6 libxi6 libxtst6 libgl1 \
+    # Helpful for headless display use-cases
+    xvfb \
+  && rm -rf /var/lib/apt/lists/*
+
+# ---- mise (installed from its apt repo) ----
+# Official apt-based install steps. :contentReference[oaicite:6]{index=6}
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sudo \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN install -dm 755 /etc/apt/keyrings \
+  && curl -fSs https://mise.jdx.dev/gpg-key.pub | tee /etc/apt/keyrings/mise-archive-keyring.asc >/dev/null \
+  && echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.asc] https://mise.jdx.dev/deb stable main" \
+      | tee /etc/apt/sources.list.d/mise.list >/dev/null \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends mise \
+  && rm -rf /var/lib/apt/lists/*
+
+# Ensure mise shims are on PATH for non-interactive shells
+ENV PATH="/root/.local/share/mise/shims:/root/.local/bin:${PATH}"
+
+# Install language runtimes via mise.
+# Note: Copilot CLI requires Node.js 22+ for npm install path. :contentReference[oaicite:7]{index=7}
+RUN mise install -y node@22 python@3.12 temurin@21 \
+  && mise use -g node@22 python@3.12 temurin@21
+
+# ---- Android SDK (cmdline-tools + platform-tools + emulator) ----
+ENV ANDROID_SDK_ROOT=/opt/android-sdk \
+    ANDROID_HOME=/opt/android-sdk
+
+RUN mkdir -p ${ANDROID_SDK_ROOT}/cmdline-tools \
+  && cd /tmp \
+  && wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip \
+  && unzip -q cmdline-tools.zip -d ${ANDROID_SDK_ROOT}/cmdline-tools \
+  && mv ${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools ${ANDROID_SDK_ROOT}/cmdline-tools/latest \
+  && rm -f cmdline-tools.zip
+
+ENV PATH="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools:${ANDROID_SDK_ROOT}/emulator:${PATH}"
+
+# Accept licenses + install core SDK components.
+# Adjust API level / build-tools as you like.
+RUN yes | sdkmanager --licenses >/dev/null \
+  && sdkmanager \
+    "platform-tools" \
+    "platforms;android-34" \
+    "build-tools;34.0.0" \
+    "emulator" \
+    "system-images;android-34;google_apis;x86_64"
+
+# Optional: create a default AVD (headless usage still needs /dev/kvm on Linux)
+RUN echo "no" | avdmanager create avd -n pixel_api34 -k "system-images;android-34;google_apis;x86_64" --device "pixel" || true
+
+# ---- Playwright browsers (copy from donor image) ----
+# The Playwright image keeps browsers under /ms-playwright. :contentReference[oaicite:8]{index=8}
+COPY --from=playwright_browsers /ms-playwright /ms-playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# ---- AI coding CLIs (installed via npm global) ----
+# Codex CLI install: npm i -g @openai/codex :contentReference[oaicite:9]{index=9}
+# Copilot CLI install: npm install -g @github/copilot :contentReference[oaicite:10]{index=10}
+# Gemini CLI npm package exists; install via npm. :contentReference[oaicite:11]{index=11}
+# Claude Code: npm method exists but is deprecated in favor of native installer. :contentReference[oaicite:12]{index=12}
+RUN npm i -g \
+    @openai/codex \
+    @github/copilot \
+    @google/gemini-cli \
+    @anthropic-ai/claude-code
+
+# ---- Llama.cpp (build toolchain already present); you will build per-project as needed ----
+# (Intentionally not cloning/building here to avoid pinning a moving target.)
+
+WORKDIR /workspace
+CMD ["/bin/bash"]

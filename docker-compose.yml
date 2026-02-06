@@ -1,0 +1,35 @@
+services:
+  devbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.devbox
+    volumes:
+      - ./:/workspace
+    working_dir: /workspace
+    tty: true
+    stdin_open: true
+    environment:
+      # Playwright Test will connect to the remote browser server
+      - PW_TEST_CONNECT_WS_ENDPOINT=ws://pw:3000/
+
+  pw:
+    image: mcr.microsoft.com/playwright:v1.58.0-noble
+    user: pwuser
+    init: true
+    ipc: host
+    shm_size: "2gb"
+    command: >
+      /bin/sh -lc "npx -y playwright@1.58.0 run-server
+      --port 3000 --host 0.0.0.0"
+
+  # Strongly recommended: run your app under test as a compose service
+  # so the browser in `pw` can reach it via http://app:<port>
+  app:
+    image: node:22
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    command: /bin/sh -lc "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+
