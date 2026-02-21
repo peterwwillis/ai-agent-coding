@@ -1,12 +1,13 @@
 CONF_FILE := colima.yaml
 LINUX_CONF_DIR := $(HOME)/.config/colima
 MACOS_CONF_DIR := $(HOME)/.colima
-COLIMA_INSTANCE_NAME := $(notdir $(patsubst %/,%,$(CURDIR)))
+#
+#COLIMA_INSTANCE_NAME := $(notdir $(patsubst %/,%,$(CURDIR)))
 
 # use a Makefile.inc with the following defined:
 #     COLIMA_INSTANCE_NAME = <name here>
 #
-include Makefile.inc
+-include Makefile.inc
 
 ####################################################################################
 
@@ -23,9 +24,8 @@ ifeq ($(UNAME_M),arm64)
 	ARCH = aarch64
 endif
 ifeq ($(UNAME_M),x86_64)
-	ARCH = x86_64
+	ARCH := x86_64
 endif
-
 
 all:
 	@echo "Targets:"
@@ -36,15 +36,22 @@ all:
 install: install-mise install-config
 
 install-config:
-	mkdir -p $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)
-	if [ ! -e $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE) ] ; then \
-		cp -a $(CONF_FILE) $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE) ; \
+	@if [ -n "$(COLIMA_INSTANCE_NAME)" ] ; then \
+		set -x ; \
+		mkdir -p $(CONF_DIR)/$(COLIMA_INSTANCE_NAME) && \
+		if [ ! -e $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE) ] ; then \
+			cp -a $(CONF_FILE) $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE) ; \
+		fi ; \
+		echo "Colima config installed at '$(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE)'." ; \
+		echo "Now start your VM with 'colima start $(COLIMA_INSTANCE_NAME)'" ; \
+	else \
+		echo "WARNING: No COLIMA_INSTANCE_NAME defined; not installing config file!" ; \
 	fi
-	@echo "Colima config installed at '$(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE)'."
-	@echo "Now start your VM with 'colima start $(COLIMA_INSTANCE_NAME)'"
 
 check-deps:
-	command -v qemu-system-$$ARCH || exit 1
+	command -v qemu-system-$(ARCH) || exit 1
 
 install-mise: check-deps
-	mise use -g lima colima
+	if ! command -v mise >/dev/null 2>&1 ; then \
+		mise use -g lima colima ; \
+	fi
