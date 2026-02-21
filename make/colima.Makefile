@@ -4,6 +4,15 @@ MACOS_COLIMA_CONF_DIR := $(HOME)/.colima
 #
 #COLIMA_INSTANCE_NAME := $(notdir $(patsubst %/,%,$(CURDIR)))
 
+
+####################################################################################
+
+GIT_ROOTDIR := $(shell git rev-parse --show-toplevel)
+
+# Colima depends on qemu and docker
+include $(GIT_ROOTDIR)/make/qemu.Makefile
+include $(GIT_ROOTDIR)/make/docker.Makefile
+
 # use a Makefile.inc with the following defined:
 #     COLIMA_INSTANCE_NAME = <name here>
 #
@@ -48,7 +57,7 @@ install-config:
 		echo "WARNING: No COLIMA_INSTANCE_NAME defined; not installing config file!" ; \
 	fi
 
-check-deps:
+check-deps: install-qemu install-docker
 	command -v docker || exit 1
 	command -v qemu-system-$(ARCH) || exit 1
 

@@ -2,10 +2,10 @@
 # Detect OS, set targets
 UNAME_S := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ifeq ($(UNAME_S),linux)
-	T_INSTALL = install-linux
+	T_INSTALL_QEMU = install-qemu-linux
 endif
 ifeq ($(UNAME_S),darwin)
-	T_INSTALL = install-macos
+	T_INSTALL_QEMU = install-qemu-macos
 endif
 UNAME_M := $(shell uname -m | tr '[:upper:]' '[:lower:]')
 ifeq ($(UNAME_M),arm64)
@@ -15,9 +15,10 @@ ifeq ($(UNAME_M),x86_64)
 	ARCH := x86_64
 endif
 
-install: $(T_INSTALL)
+install:
+install-qemu: $(T_INSTALL_QEMU)
 
-install-linux:
+install-qemu-linux:
 	if ! command -v qemu-system-$(ARCH) ; then \
 		if command -v apt >/dev/null 2>&1; then \
 			sudo apt-get update && \
@@ -28,7 +29,7 @@ install-linux:
 		fi ; \
 	fi
 
-install-macos:
+install-qemu-macos:
 	if ! command -v qemu-system-$(ARCH) ; then \
 		if command -v brew >/dev/null 2>&1; then \
 			brew install qemu ; \

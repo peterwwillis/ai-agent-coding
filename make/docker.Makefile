@@ -2,16 +2,17 @@
 # Detect OS, set targets
 UNAME_S := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ifeq ($(UNAME_S),linux)
-	T_INSTALL = install-linux
+	T_INSTALL_DOCKER = install-docker-linux
 endif
 ifeq ($(UNAME_S),darwin)
-	T_INSTALL = install-macos
+	T_INSTALL_DOCKER = install-docker-macos
 endif
 
 
-install: $(T_INSTALL)
+install:
+install-docker: $(T_INSTALL_DOCKER)
 
-install-linux:
+install-docker-linux:
 	if ! command -v docker ; then \
 		if command -v apt >/dev/null 2>&1; then \
 			sudo apt-get update && \
@@ -29,7 +30,7 @@ install-linux:
 		fi ; \
 	fi
 
-install-macos:
+install-docker-macos:
 	if ! command -v docker ; then \
 		if command -v brew >/dev/null 2>&1; then \
 			brew install --cask docker; \
