@@ -1,7 +1,7 @@
 DEPENDENT_COMMANDS := colima
 CONF_FILE := colima.yaml
 LINUX_CONF_DIR := $(HOME)/.config/colima
-MACOS_CONF_DIR := $(HOME/.colima
+MACOS_CONF_DIR := $(HOME)/.colima
 COLIMA_INSTANCE_NAME := $(notdir $(patsubst %/,%,$(CURDIR)))
 
 include Makefile.inc
@@ -20,8 +20,9 @@ endif
 all:
 	@echo "Targets:"
 	@echo "  check-deps"
-	@echo "  install"
+	@echo "  install				Runs 'install-config', 'install-mise'"
 	@echo "  install-config"
+	@echo "  install-mise"
 
 check-deps:
 	@for CMD in $(DEPENDENT_COMMANDS) ; do \
@@ -31,10 +32,13 @@ check-deps:
 		fi ; \
 	done
 
-install: check-deps install-config
+install: check-deps install-config install-mise
 
 install-config:
 	mkdir -p $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)
 	if [ ! -e $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE) ] ; then \
 		cp -a $(CONF_FILE) $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE) ; \
 	fi
+
+install-mise:
+	mise install colima
