@@ -33,4 +33,4 @@ install-config:
 	@echo "Now start your VM with 'colima start $(COLIMA_INSTANCE_NAME)'"
 
 install-mise:
-	mise install colima
+	mise use -g lima colima
