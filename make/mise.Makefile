@@ -1,5 +1,6 @@
 INSTALL_DIR = $(HOME)/.local/bin
 
+# Add MISE_INSTALL_TOOLS= to Makefile.inc to install a set of tools with mise
 -include Makefile.inc
 
 ####################################################################################
@@ -15,9 +16,16 @@ endif
 
 all:
 	@echo "Targets:"
-	@echo "  install"
+	@echo "  install			Runs install-mise-*, install-tools"
+	@echo "  install-tools			Installs tools listed in MISE_INSTALL_TOOLS ($(MISE_INSTALL_TOOLS))"
 
-install: $(T_INSTALL)
+install: $(T_INSTALL) install-tools
+
+install-tools:
+	set -eux ; \
+	for tool in $(MISE_INSTALL_TOOLS) ; do \
+		mise use -g $$tool ; \
+	done
 
 check-deps-macos:
 	for command in tar grep curl xcode-select ; do \
