@@ -1,3 +1,14 @@
+# This config does the following:
+#
+# - Uses a network 'dind-lab' to connect containers.
+#   This must be created with 'docker network create --driver bridge dind-lab'
+#
+# - Start a couple services:
+#   - devbox: A container with basic dev tools installed.
+#     Built at compose-up time from 'Dockerfile.devbox'.
+#   - pw: A Playwright container listening on port 3000
+#   - android-emulator: An android emulator
+
 services:
   devbox:
     image: devbox:latest
