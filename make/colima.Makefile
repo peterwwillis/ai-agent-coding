@@ -49,6 +49,7 @@ install-config:
 	fi
 
 check-deps:
+	command -v docker || exit 1
 	command -v qemu-system-$(ARCH) || exit 1
 
 install-mise: check-deps
