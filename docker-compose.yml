@@ -1,5 +1,6 @@
 services:
   devbox:
+    image: devbox:latest
     build:
       context: .
       dockerfile: Dockerfile.devbox
@@ -58,6 +59,7 @@ services:
 networks:
   dind-lab:
     external: true
+    name: dind-lab
 
 volumes:
   android-data:
