@@ -25,7 +25,18 @@ check-deps-macos:
 	done
 
 install-mise-macos: check-deps-macos
-	xcode-select --install
+	tmpfile="$$(mktemp)" ; \
+	xcode-select --install 2>"$$tmpfile" ; \
+	if [ $$? -ne 0 ] ; then \
+		if grep 'Command line tools are already installed' "$$tmpfile" ; then \
+			true ; \
+		else \
+			cat "$$tmpfile" ; \
+			rm -f "$$tmpfile" ; \
+			exit 1 ; \
+		fi ; \
+		rm -f "$$tmpfile" ; \
+	fi
 	set -eux ; \
 	ARCH="$$(uname -m)" ; \
 	[ "$$ARCH" = "arm64" ] && TARGET="macos-arm64" ; \
@@ -56,12 +67,18 @@ check-deps-linux:
 		command -v $$command || exit 1 ; \
 	done
 
+# Install mise system-wide on Linux, partly because it's more secure,
+# and partly because system packages are easier to remove/upgrade/etc
 install-mise-linux: check-deps-linux
 	if ! command -v mise >/dev/null 2>&1 ; then \
-		sudo add-apt-repository -y ppa:jdxcode/mise && \
-		sudo apt update -y && \
-		sudo apt install -y mise && \
-		echo "" && \
-		echo "Add this to your ~/.bashrc file:" && \
-		echo '    eval "$$(mise activate bash)"' ; \
+		if command -v apt ; then \
+			sudo add-apt-repository -y ppa:jdxcode/mise && \
+			sudo apt update -y && \
+			sudo apt install -y mise && \
+			echo "" && \
+			echo "Add this to your ~/.bashrc file:" && \
+			echo '    eval "$$(mise activate bash)"' ; \
+		else \
+			exit 1 ; \
+		fi ; \
 	fi

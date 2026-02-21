@@ -3,6 +3,9 @@ LINUX_CONF_DIR := $(HOME)/.config/colima
 MACOS_CONF_DIR := $(HOME)/.colima
 COLIMA_INSTANCE_NAME := $(notdir $(patsubst %/,%,$(CURDIR)))
 
+# use a Makefile.inc with the following defined:
+#     COLIMA_INSTANCE_NAME = <name here>
+#
 include Makefile.inc
 
 ####################################################################################
@@ -15,6 +18,14 @@ endif
 ifeq ($(UNAME_S),darwin)
 	CONF_DIR = $(MACOS_CONF_DIR)
 endif
+UNAME_M := $(shell uname -m | tr '[:upper:]' '[:lower:]')
+ifeq ($(UNAME_M),arm64)
+	ARCH = aarch64
+endif
+ifeq ($(UNAME_M),x86_64)
+	ARCH = x86_64
+endif
+
 
 all:
 	@echo "Targets:"
@@ -32,5 +43,8 @@ install-config:
 	@echo "Colima config installed at '$(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE)'."
 	@echo "Now start your VM with 'colima start $(COLIMA_INSTANCE_NAME)'"
 
-install-mise:
+check-deps:
+	command -v qemu-system-$$ARCH || exit 1
+
+install-mise: check-deps
 	mise use -g lima colima
