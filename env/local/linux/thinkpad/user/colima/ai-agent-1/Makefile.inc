@@ -1,0 +1,1 @@
+COLIMA_INSTANCE_NAME = ai-agent-1
