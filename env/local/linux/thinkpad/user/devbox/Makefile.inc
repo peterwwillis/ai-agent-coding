@@ -1,1 +1,1 @@
-NETWORK_NAME = dind-lab
+DOCKER_NETWORK_NAME = dind-lab

@@ -1,4 +1,4 @@
-INSTALL_DIR = $(HOME)/.local/bin
+MISE_INSTALL_DIR = $(HOME)/.local/bin
 
 # Add MISE_INSTALL_TOOLS= to Makefile.inc to install a set of tools with mise
 -include Makefile.inc
@@ -62,9 +62,9 @@ install-mise-macos: check-deps-macos
 		grep -E "[[:space:]]+$$ARCHIVE$$" "$$CHECKSUMS" | shasum -a 256 -c - && \
 		tmpdir="$$(mktemp -d)" && \
 		tar -C "$$tmpdir" -xf "$$ARCHIVE" && \
-		mkdir -p "$(INSTALL_DIR)" && \
-		mv "$$tmpdir/mise/bin/mise" "$(INSTALL_DIR)" && \
-		chmod 755 "$(INSTALL_DIR)/mise" && \
+		mkdir -p "$(MISE_INSTALL_DIR)" && \
+		mv "$$tmpdir/mise/bin/mise" "$(MISE_INSTALL_DIR)" && \
+		chmod 755 "$(MISE_INSTALL_DIR)/mise" && \
 		rm -rf "$$tmpdir" && \
 		echo "" && \
 		echo "Add this to your ~/.bashrc file:" && \

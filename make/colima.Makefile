@@ -1,6 +1,6 @@
-CONF_FILE := colima.yaml
-LINUX_CONF_DIR := $(HOME)/.config/colima
-MACOS_CONF_DIR := $(HOME)/.colima
+COLIMA_CONF_FILE := colima.yaml
+LINUX_COLIMA_CONF_DIR := $(HOME)/.config/colima
+MACOS_COLIMA_CONF_DIR := $(HOME)/.colima
 #
 #COLIMA_INSTANCE_NAME := $(notdir $(patsubst %/,%,$(CURDIR)))
 
@@ -14,10 +14,10 @@ MACOS_CONF_DIR := $(HOME)/.colima
 # Detect OS, set targets
 UNAME_S := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ifeq ($(UNAME_S),linux)
-	CONF_DIR = $(LINUX_CONF_DIR)
+	COLIMA_CONF_DIR = $(LINUX_COLIMA_CONF_DIR)
 endif
 ifeq ($(UNAME_S),darwin)
-	CONF_DIR = $(MACOS_CONF_DIR)
+	COLIMA_CONF_DIR = $(MACOS_COLIMA_CONF_DIR)
 endif
 UNAME_M := $(shell uname -m | tr '[:upper:]' '[:lower:]')
 ifeq ($(UNAME_M),arm64)
@@ -38,11 +38,11 @@ install: install-mise install-config
 install-config:
 	@if [ -n "$(COLIMA_INSTANCE_NAME)" ] ; then \
 		set -x ; \
-		mkdir -p $(CONF_DIR)/$(COLIMA_INSTANCE_NAME) && \
-		if [ ! -e $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE) ] ; then \
-			cp -a $(CONF_FILE) $(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE) ; \
+		mkdir -p $(COLIMA_CONF_DIR)/$(COLIMA_INSTANCE_NAME) && \
+		if [ ! -e $(COLIMA_CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(COLIMA_CONF_FILE) ] ; then \
+			cp -a $(COLIMA_CONF_FILE) $(COLIMA_CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(COLIMA_CONF_FILE) ; \
 		fi ; \
-		echo "Colima config installed at '$(CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(CONF_FILE)'." ; \
+		echo "Colima config installed at '$(COLIMA_CONF_DIR)/$(COLIMA_INSTANCE_NAME)/$(COLIMA_CONF_FILE)'." ; \
 		echo "Now start your VM with 'colima start $(COLIMA_INSTANCE_NAME)'" ; \
 	else \
 		echo "WARNING: No COLIMA_INSTANCE_NAME defined; not installing config file!" ; \
