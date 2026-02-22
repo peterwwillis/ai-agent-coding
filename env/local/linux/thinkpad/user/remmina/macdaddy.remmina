@@ -1,0 +1,37 @@
+[remmina]
+
+# General Connection Info
+name=Macdaddy
+group=home
+protocol=VNC
+server=macdaddy
+username=admin
+# (Leave password blank to be prompted or see Note below)
+password=
+
+# colordepth must be either 32 or 16 for macos
+colordepth=16
+
+# quality: 0 for Poor (fastest), 1 for Medium, 2 for Good, 9 for Best (slowest).
+quality=0
+
+# viewmode: 1=Windowed, 2=Fullscreen, 3=Scrolled Fullscreen, 4=Viewport Fullscreen
+viewmode=2
+
+# scale: 0=Off, 1=Standard Scaling (On), 2=Dynamic Resolution
+scale=1
+
+# window_maximize: 1=Maximize window on launch, 0=Normal window
+window_maximize=1
+
+# (Encryption is often handled by macOS's own layer; setting to 1 avoids handshake errors)
+#disableencryption=1
+
+# Keyboard Fix for macOS
+# Maps Linux 'Super' to Mac 'Command' and 'Alt' to 'Option'
+keymap=Map Meta Keys
+
+# Performance and UI
+showcursor=1
+disableserverbell=1
+disable-smooth-scrolling=1
