@@ -1,0 +1,4 @@
+FROM hf.co/unsloth/gemma-3-27b-it-qat-GGUF:UD-Q3_K_XL
+
+# Set the context window size
+PARAMETER num_ctx 2048
