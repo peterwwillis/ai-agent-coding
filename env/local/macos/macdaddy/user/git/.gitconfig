@@ -1,0 +1,9 @@
+[credential]
+    helper = cache --timeout 7200
+        helper = oauth -device -verbose
+[user]
+        email = 31324861+peterwwillis@users.noreply.github.com
+        name = Peter W
+[push]
+        autoSetupRemote = true
+
