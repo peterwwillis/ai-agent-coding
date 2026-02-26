@@ -1,6 +1,10 @@
 MISE_INSTALL_DIR = $(HOME)/.local/bin
 
-# Add MISE_INSTALL_TOOLS= to Makefile.inc to install a set of tools with mise
+# Add MISE_INSTALL_TOOLS= to Makefile.inc to install a set of tools with mise.
+#
+# You can also put a '.tool-versions' file here and it will be installed
+# to the user's home dir, with 'mise install' run.
+#
 -include Makefile.inc
 
 ####################################################################################
@@ -26,6 +30,11 @@ install-tools:
 	for tool in $(MISE_INSTALL_TOOLS) ; do \
 		mise use -g $$tool ; \
 	done
+	set -eux ; if [ -r .tool-versions ] ; then \
+		cp -a -f .tool-versions ~/ && \
+		cd ~ && \
+		mise install ; \
+	fi
 
 check-deps-macos:
 	for command in tar grep curl xcode-select ; do \

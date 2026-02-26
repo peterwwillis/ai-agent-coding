@@ -1,0 +1,15 @@
+jq 1.7.1
+
+gcloud latest
+
+node 20
+npm:npm 10.9.3
+npm:@google/gemini-cli latest
+
+npm:@qwen-code/qwen-code latest
+
+npm:@github/copilot latest
+
+shellcheck latest
+
+ollama
