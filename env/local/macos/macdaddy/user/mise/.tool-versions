@@ -12,4 +12,4 @@ npm:@github/copilot latest
 
 shellcheck latest
 
-ollama
+ollama latest
