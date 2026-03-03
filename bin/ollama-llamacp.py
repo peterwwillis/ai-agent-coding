@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shlex
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -275,6 +276,84 @@ def params_to_llamacpp_flags(params: Dict[str, Any]) -> List[str]:
         add("-c", params["num_ctx"])
 
     return flags
+
+
+def read_gguf_chat_template(path: Path) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Best-effort extraction of tokenizer.chat_template from GGUF metadata.
+    Returns (template, note). If not present or not GGUF, returns (None, None).
+    """
+    gguf_types = {
+        0: 1,  # UINT8
+        1: 1,  # INT8
+        2: 2,  # UINT16
+        3: 2,  # INT16
+        4: 4,  # UINT32
+        5: 4,  # INT32
+        6: 4,  # FLOAT32
+        7: 1,  # BOOL
+        10: 8,  # UINT64
+        11: 8,  # INT64
+        12: 8,  # FLOAT64
+    }
+
+    def read_u32(f) -> int:
+        data = f.read(4)
+        if len(data) != 4:
+            raise EOFError
+        return struct.unpack("<I", data)[0]
+
+    def read_u64(f) -> int:
+        data = f.read(8)
+        if len(data) != 8:
+            raise EOFError
+        return struct.unpack("<Q", data)[0]
+
+    def read_str(f) -> str:
+        length = read_u64(f)
+        data = f.read(length)
+        if len(data) != length:
+            raise EOFError
+        return data.decode("utf-8", errors="replace")
+
+    def skip_value(f, vtype: int):
+        if vtype in gguf_types:
+            f.seek(gguf_types[vtype], os.SEEK_CUR)
+            return
+        if vtype == 8:  # STRING
+            length = read_u64(f)
+            f.seek(length, os.SEEK_CUR)
+            return
+        if vtype == 9:  # ARRAY
+            elem_type = read_u32(f)
+            count = read_u64(f)
+            for _ in range(count):
+                skip_value(f, elem_type)
+            return
+        raise ValueError(f"Unsupported GGUF value type: {vtype}")
+
+    try:
+        if not path.is_file():
+            return None, None
+        with path.open("rb") as f:
+            if f.read(4) != b"GGUF":
+                return None, None
+            _version = read_u32(f)
+            _tensor_count = read_u64(f)
+            kv_count = read_u64(f)
+            for _ in range(kv_count):
+                key = read_str(f)
+                vtype = read_u32(f)
+                if key == "tokenizer.chat_template":
+                    if vtype == 8:
+                        return read_str(f), None
+                    skip_value(f, vtype)
+                    return None, "GGUF tokenizer.chat_template is not a string; ignoring."
+                skip_value(f, vtype)
+    except Exception:
+        return None, None
+
+    return None, None
 
 
 def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[str], List[str]]:
@@ -606,8 +685,16 @@ def build_llamacpp_command(
     elif include_params and not rec.params:
         notes.append("No params JSON found in Ollama metadata; skipping sampling flags.")
 
-    # Template conversion (best-effort)
-    if rec.template_text:
+    gguf_template = None
+    if weights.exists:
+        gguf_template, gguf_note = read_gguf_chat_template(weights.blob_path)
+        if gguf_note:
+            notes.append(gguf_note)
+
+    # Template conversion (best-effort) when GGUF doesn't already provide one
+    if gguf_template:
+        notes.append("GGUF tokenizer.chat_template found; skipping --chat-template.")
+    elif rec.template_text:
         chat_template, template_notes = convert_ollama_template_to_llamacpp(rec.template_text)
         notes.extend(template_notes)
         if chat_template:
