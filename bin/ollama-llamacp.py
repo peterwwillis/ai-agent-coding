@@ -284,28 +284,159 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
     """
     notes: List[str] = []
     stack: List[str] = []
+    context_stack: List[str] = []
     out: List[str] = []
     used_system = False
     used_prompt = False
     used_response = False
+    used_suffix = False
+    used_prefix = False
+    used_tools = False
+    used_tool_calls = False
 
     token_re = re.compile(r"{{-?\s*(.+?)\s*-?}}", re.DOTALL)
 
-    def convert_expr(expr: str) -> str:
-        nonlocal used_system, used_prompt, used_response
+    def split_top_level_args(text: str) -> List[str]:
+        args: List[str] = []
+        current: List[str] = []
+        depth = 0
+        in_str = False
+        quote = ""
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if in_str:
+                current.append(ch)
+                if ch == quote and (i == 0 or text[i - 1] != "\\"):
+                    in_str = False
+                i += 1
+                continue
+            if ch in ("'", '"'):
+                in_str = True
+                quote = ch
+                current.append(ch)
+                i += 1
+                continue
+            if ch == "(":
+                depth += 1
+                current.append(ch)
+            elif ch == ")":
+                depth = max(depth - 1, 0)
+                current.append(ch)
+            elif ch.isspace() and depth == 0:
+                if current:
+                    args.append("".join(current).strip())
+                    current = []
+                i += 1
+                while i < len(text) and text[i].isspace():
+                    i += 1
+                continue
+            else:
+                current.append(ch)
+            i += 1
+        if current:
+            args.append("".join(current).strip())
+        return args
+
+    def unwrap_parens(expr: str) -> Tuple[str, bool]:
+        expr = expr.strip()
+        if not (expr.startswith("(") and expr.endswith(")")):
+            return expr, False
+        depth = 0
+        for i, ch in enumerate(expr):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0 and i != len(expr) - 1:
+                    return expr, False
+        return expr[1:-1].strip(), True
+
+    def replace_vars(expr: str) -> str:
+        nonlocal used_system, used_prompt, used_response, used_suffix, used_prefix, used_tools, used_tool_calls
         if ".System" in expr:
             used_system = True
         if ".Prompt" in expr:
             used_prompt = True
         if ".Response" in expr:
             used_response = True
+        if ".Suffix" in expr:
+            used_suffix = True
+        if ".Prefix" in expr:
+            used_prefix = True
+        if ".Tools" in expr:
+            used_tools = True
+        if ".ToolCalls" in expr:
+            used_tool_calls = True
+        expr = expr.replace(".ToolCalls", "tool_calls")
+        expr = expr.replace(".Tools", "tools")
         expr = expr.replace(".System", "system")
         expr = expr.replace(".Prompt", "prompt")
         expr = expr.replace(".Response", "response")
+        expr = expr.replace(".Suffix", "suffix")
+        expr = expr.replace(".Prefix", "prefix")
         expr = expr.replace(".Messages", "messages")
         expr = expr.replace(".Role", "message['role']")
         expr = expr.replace(".Content", "message['content']")
+        expr = re.sub(r"\$i\b", "loop.index0", expr)
+        expr = re.sub(r"\$([A-Za-z_][A-Za-z0-9_]*)", r"\1", expr)
+        context_var = context_stack[-1] if context_stack else None
+        if context_var:
+            expr = re.sub(r"(?<!\w)\.([A-Za-z_][A-Za-z0-9_]*)", rf"{context_var}.\1", expr)
+        else:
+            expr = re.sub(r"(?<!\w)\.([A-Za-z_][A-Za-z0-9_]*)", r"\1", expr)
         return expr
+
+    def convert_func_expr(expr: str) -> str:
+        func_ops = {
+            "eq": "==",
+            "ne": "!=",
+            "lt": "<",
+            "le": "<=",
+            "gt": ">",
+            "ge": ">=",
+        }
+        for func, op in func_ops.items():
+            if expr.startswith(func + " "):
+                args = split_top_level_args(expr[len(func):].strip())
+                if len(args) >= 2:
+                    left = convert_expr(args[0])
+                    right = convert_expr(args[1])
+                    return f"{left} {op} {right}"
+                return expr
+        for func, op in (("and", "and"), ("or", "or")):
+            if expr.startswith(func + " "):
+                args = split_top_level_args(expr[len(func):].strip())
+                if len(args) >= 2:
+                    joined = f" {op} ".join(f"{convert_expr(a)}" for a in args)
+                    return joined
+                return expr
+        if expr.startswith("not "):
+            arg = expr[4:].strip()
+            return f"not {convert_expr(arg)}"
+        if expr.startswith("len "):
+            arg = expr[4:].strip()
+            return f"({convert_expr(arg)})|length"
+        if expr.startswith("slice "):
+            args = split_top_level_args(expr[6:].strip())
+            if len(args) >= 2:
+                seq = convert_expr(args[0])
+                start = convert_expr(args[1])
+                if len(args) >= 3:
+                    end = convert_expr(args[2])
+                    return f"{seq}[{start}:{end}]"
+                return f"{seq}[{start}:]"
+        if expr.startswith("json "):
+            arg = expr[5:].strip()
+            return f"({convert_expr(arg)})|tojson"
+        return expr
+
+    def convert_expr(expr: str) -> str:
+        expr = expr.strip()
+        expr, wrapped = unwrap_parens(expr)
+        expr = replace_vars(expr)
+        converted = convert_func_expr(expr)
+        return f"({converted})" if wrapped else converted
 
     pos = 0
     for m in token_re.finditer(template_text):
@@ -322,18 +453,49 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
             out.append("{% else %}")
         elif token.startswith("range "):
             range_expr_raw = token[6:].strip()
-            if ":=" in range_expr_raw or range_expr_raw.startswith("$"):
-                notes.append("Go template range assignment found; conversion may need manual edits.")
-            is_messages = ".Messages" in range_expr_raw
+            loop_vars: List[str] = []
+            if ":=" in range_expr_raw:
+                lhs, rhs = range_expr_raw.split(":=", 1)
+                range_expr_raw = rhs.strip()
+                for var in lhs.split(","):
+                    var = var.strip()
+                    if var in ("_", "$_") or not var:
+                        continue
+                    if var.startswith("$"):
+                        var = var[1:]
+                    loop_vars.append(var)
+            is_messages = ".Messages" in range_expr_raw or "messages" in range_expr_raw
             range_expr = convert_expr(range_expr_raw)
-            loop_var = "message" if is_messages else "item"
+            if len(loop_vars) >= 2 and range_expr.endswith("Properties"):
+                range_expr = f"{range_expr}.items()"
+            if is_messages:
+                loop_var = "message"
+                if loop_vars and loop_vars[0] != "message":
+                    notes.append("Range index variable dropped; use loop.index0/loop.last.")
+            elif loop_vars:
+                loop_var = ", ".join(loop_vars[:2])
+                if len(loop_vars) > 2:
+                    notes.append("Range assignment has more than two variables; conversion may need manual edits.")
+            else:
+                loop_var = "item"
             out.append(f"{{% for {loop_var} in {range_expr} %}}")
             stack.append("for")
+            context_var = loop_var.split(",")[-1].strip()
+            if context_var:
+                context_stack.append(context_var)
         elif token.startswith("with "):
             expr = convert_expr(token[5:].strip())
             out.append(f"{{% if {expr} %}}")
             stack.append("if")
             notes.append("Go template 'with' converted to 'if'; inner references may need manual edits.")
+        elif re.match(r"^\$?[A-Za-z_][A-Za-z0-9_]*\s*:=", token):
+            assign_match = re.match(r"^\$?([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*(.+)$", token)
+            if assign_match:
+                var = assign_match.group(1)
+                expr = convert_expr(assign_match.group(2))
+                if var == "last" and "loop.index0" in expr and "messages" in expr:
+                    expr = "loop.last"
+                out.append(f"{{% set {var} = {expr} %}}")
         elif token == "end":
             if not stack:
                 notes.append("Unmatched {{ end }} in template conversion.")
@@ -341,6 +503,8 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
             else:
                 block = stack.pop()
                 out.append("{% endif %}" if block == "if" else "{% endfor %}")
+                if block == "for" and context_stack:
+                    context_stack.pop()
         else:
             out.append("{{ " + convert_expr(token) + " }}")
         pos = m.end()
@@ -359,6 +523,14 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
         notes.append("Converted .Prompt to 'prompt'; ensure llama.cpp template engine provides it or adjust manually.")
     if used_response:
         notes.append("Converted .Response to 'response'; ensure llama.cpp template engine provides it or adjust manually.")
+    if used_suffix:
+        notes.append("Converted .Suffix to 'suffix'; ensure llama.cpp template engine provides it or adjust manually.")
+    if used_prefix:
+        notes.append("Converted .Prefix to 'prefix'; ensure llama.cpp template engine provides it or adjust manually.")
+    if used_tools:
+        notes.append("Converted .Tools to 'tools'; ensure llama.cpp template engine provides it or adjust manually.")
+    if used_tool_calls:
+        notes.append("Converted .ToolCalls to 'tool_calls'; ensure llama.cpp template engine provides it or adjust manually.")
 
     return converted, notes
 
