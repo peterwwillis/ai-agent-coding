@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -276,6 +277,92 @@ def params_to_llamacpp_flags(params: Dict[str, Any]) -> List[str]:
     return flags
 
 
+def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[str], List[str]]:
+    """
+    Best-effort conversion from Ollama Go templates to llama.cpp chat templates (Jinja-like).
+    Returns (template, notes). If conversion fails, template is None with notes.
+    """
+    notes: List[str] = []
+    stack: List[str] = []
+    out: List[str] = []
+    used_system = False
+    used_prompt = False
+    used_response = False
+
+    token_re = re.compile(r"{{-?\s*(.+?)\s*-?}}", re.DOTALL)
+
+    def convert_expr(expr: str) -> str:
+        nonlocal used_system, used_prompt, used_response
+        if ".System" in expr:
+            used_system = True
+        if ".Prompt" in expr:
+            used_prompt = True
+        if ".Response" in expr:
+            used_response = True
+        expr = expr.replace(".System", "system")
+        expr = expr.replace(".Prompt", "prompt")
+        expr = expr.replace(".Response", "response")
+        expr = expr.replace(".Messages", "messages")
+        expr = expr.replace(".Role", "message['role']")
+        expr = expr.replace(".Content", "message['content']")
+        return expr
+
+    pos = 0
+    for m in token_re.finditer(template_text):
+        out.append(template_text[pos:m.start()])
+        token = m.group(1).strip()
+        if token.startswith("if "):
+            cond = convert_expr(token[3:].strip())
+            out.append(f"{{% if {cond} %}}")
+            stack.append("if")
+        elif token.startswith("else if "):
+            cond = convert_expr(token[8:].strip())
+            out.append(f"{{% elif {cond} %}}")
+        elif token == "else":
+            out.append("{% else %}")
+        elif token.startswith("range "):
+            range_expr_raw = token[6:].strip()
+            if ":=" in range_expr_raw or range_expr_raw.startswith("$"):
+                notes.append("Go template range assignment found; conversion may need manual edits.")
+            is_messages = ".Messages" in range_expr_raw
+            range_expr = convert_expr(range_expr_raw)
+            loop_var = "message" if is_messages else "item"
+            out.append(f"{{% for {loop_var} in {range_expr} %}}")
+            stack.append("for")
+        elif token.startswith("with "):
+            expr = convert_expr(token[5:].strip())
+            out.append(f"{{% if {expr} %}}")
+            stack.append("if")
+            notes.append("Go template 'with' converted to 'if'; inner references may need manual edits.")
+        elif token == "end":
+            if not stack:
+                notes.append("Unmatched {{ end }} in template conversion.")
+                out.append("{% endif %}")
+            else:
+                block = stack.pop()
+                out.append("{% endif %}" if block == "if" else "{% endfor %}")
+        else:
+            out.append("{{ " + convert_expr(token) + " }}")
+        pos = m.end()
+    out.append(template_text[pos:])
+
+    if stack:
+        notes.append("Template conversion has unclosed blocks; review the chat template output.")
+
+    converted = "".join(out).strip()
+    if not converted:
+        return None, ["Template conversion produced empty output."]
+
+    if used_system:
+        notes.append("Converted .System to 'system'; ensure llama.cpp template engine provides it or adjust manually.")
+    if used_prompt:
+        notes.append("Converted .Prompt to 'prompt'; ensure llama.cpp template engine provides it or adjust manually.")
+    if used_response:
+        notes.append("Converted .Response to 'response'; ensure llama.cpp template engine provides it or adjust manually.")
+
+    return converted, notes
+
+
 def build_llamacpp_command(
     rec: OllamaModelRecord,
     llama_cli_path: str,
@@ -315,9 +402,14 @@ def build_llamacpp_command(
     elif include_params and not rec.params:
         notes.append("No params JSON found in Ollama metadata; skipping sampling flags.")
 
-    # Template note (llama.cpp doesn't directly consume Ollama templates)
+    # Template conversion (best-effort)
     if rec.template_text:
-        notes.append("Ollama template found. llama.cpp does not consume Ollama templates directly; use it to format your prompt/chat wrapper.")
+        chat_template, template_notes = convert_ollama_template_to_llamacpp(rec.template_text)
+        notes.extend(template_notes)
+        if chat_template:
+            argv += ["--chat-template", chat_template]
+        else:
+            notes.append("Ollama template found but could not be converted to a llama.cpp chat template.")
 
     return argv, notes
 
