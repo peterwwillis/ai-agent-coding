@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -eu
+
+MODEL_PATH="/usr/share/ollama/.ollama/models/blobs"
+MODEL_FILE="sha256-fadc3e5f8d42bf7e894a785b05082e47daee4df26680389817e2093056f088ad"
+
+
+
+_run_llamacp_docker () {
+    set -x
+    docker run --privileged \
+               --network=host \
+               --device=/dev/kfd \
+               --device=/dev/dri \
+               --group-add video \
+               --cap-add=SYS_PTRACE \
+               --security-opt seccomp=unconfined \
+               --ipc=host \
+               --shm-size 16G \
+               -v "$MODEL_PATH:/data" \
+               "$DOCKER_IMG" \
+                 -m "/data/$MODEL_FILE" \
+                 --port 8101 --host 0.0.0.0 -n 512 --n-gpu-layers 999 "$@"
+}
+
+_run_llamacp_vulkan_server () {
+    DOCKER_IMG="ghcr.io/ggml-org/llama.cpp:server-vulkan"
+    _run_llamacp_docker "$@"
+}
+_run_llamacp_rocm_server () {
+    DOCKER_IMG="ghcr.io/ggml-org/llama.cpp:server-rocm"
+    _run_llamacp_docker "$@"
+}
+
+
+_run_llamacp_amd_rocm_ubuntu24_server () {
+
+    #export LLAMACPP_ROCM_ARCH=gfx803,gfx900,gfx906,gfx908,gfx90a,gfx942,gfx1010,gfx1030,gfx1032,gfx1100,gfx1101,gfx1102
+    #HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
+    #cmake -S . -B build -DGGML_HIP=ON -DAMDGPU_TARGETS=$LLAMACPP_ROCM_ARCH \
+    #-DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=ON \
+    #&& cmake --build build --config Release -j$(nproc)
+
+    DOCKER_IMG="rocm/llama.cpp:llama.cpp-b6652.amd0_rocm7.0.0_ubuntu24.04_server"
+    _run_llamacp_docker "$@"
+ }
+
+
+
+if [ -z "$MODEL_PATH" ] || [ ! -d "$MODEL_PATH" ] ; then
+    echo "$0: Error: MODEL_PATH must be directory"
+    exit 1
+fi
+
+if [ -z "$MODEL_FILE" ] || [ ! -f "$MODEL_PATH/$MODEL_FILE" ] ; then
+    echo "$0: Error: MODEL_FILE must exist in MODEL_PATH"
+    exit 1
+fi
+
+#_run_llamacp_rocm_server
+#_run_llamacp_amd_rocm_ubuntu24_server
+_run_llamacp_vulkan_server "$@"
