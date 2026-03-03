@@ -285,6 +285,8 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
     notes: List[str] = []
     stack: List[str] = []
     context_stack: List[str] = []
+    index_var_stack: List[Optional[str]] = []
+    alias_stack: List[Dict[str, str]] = []
     out: List[str] = []
     used_system = False
     used_prompt = False
@@ -368,6 +370,8 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
             used_tools = True
         if ".ToolCalls" in expr:
             used_tool_calls = True
+        expr = re.sub(r"\$([A-Za-z_][A-Za-z0-9_]*)\.Role\b", r"\1['role']", expr)
+        expr = re.sub(r"\$([A-Za-z_][A-Za-z0-9_]*)\.Content\b", r"\1['content']", expr)
         expr = expr.replace(".ToolCalls", "tool_calls")
         expr = expr.replace(".Tools", "tools")
         expr = expr.replace(".System", "system")
@@ -380,6 +384,13 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
         expr = expr.replace(".Content", "message['content']")
         expr = re.sub(r"\$i\b", "loop.index0", expr)
         expr = re.sub(r"\$([A-Za-z_][A-Za-z0-9_]*)", r"\1", expr)
+        for alias_map in reversed(alias_stack):
+            for alias, target in alias_map.items():
+                expr = re.sub(rf"(?<!\w){re.escape(alias)}(?!\w)", target, expr)
+        for idx_var in reversed(index_var_stack):
+            if idx_var:
+                expr = re.sub(rf"(?<!\w){re.escape(idx_var)}(?!\w)", "loop.index0", expr)
+                break
         context_var = context_stack[-1] if context_stack else None
         if context_var:
             expr = re.sub(r"(?<!\w)\.([A-Za-z_][A-Za-z0-9_]*)", rf"{context_var}.\1", expr)
@@ -468,10 +479,19 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
             range_expr = convert_expr(range_expr_raw)
             if len(loop_vars) >= 2 and range_expr.endswith("Properties"):
                 range_expr = f"{range_expr}.items()"
+            index_var: Optional[str] = None
+            alias_map: Dict[str, str] = {}
             if is_messages:
                 loop_var = "message"
-                if loop_vars and loop_vars[0] != "message":
+                if len(loop_vars) >= 2:
+                    index_var = loop_vars[0]
+                    notes.append("Range index variable mapped to loop.index0.")
+                    message_var = loop_vars[1]
+                    if message_var and message_var != "message":
+                        alias_map[message_var] = "message"
+                elif loop_vars and loop_vars[0] != "message":
                     notes.append("Range index variable dropped; use loop.index0/loop.last.")
+                    alias_map[loop_vars[0]] = "message"
             elif loop_vars:
                 loop_var = ", ".join(loop_vars[:2])
                 if len(loop_vars) > 2:
@@ -483,6 +503,8 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
             context_var = loop_var.split(",")[-1].strip()
             if context_var:
                 context_stack.append(context_var)
+            index_var_stack.append(index_var)
+            alias_stack.append(alias_map)
         elif token.startswith("with "):
             expr = convert_expr(token[5:].strip())
             out.append(f"{{% if {expr} %}}")
@@ -496,6 +518,12 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
                 if var == "last" and "loop.index0" in expr and "messages" in expr:
                     expr = "loop.last"
                 out.append(f"{{% set {var} = {expr} %}}")
+        elif re.match(r"^\$?[A-Za-z_][A-Za-z0-9_]*\s*=\s*.+$", token) and not re.search(r"[=!<>]=", token):
+            assign_match = re.match(r"^\$?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$", token)
+            if assign_match:
+                var = assign_match.group(1)
+                expr = convert_expr(assign_match.group(2))
+                out.append(f"{{% set {var} = {expr} %}}")
         elif token == "end":
             if not stack:
                 notes.append("Unmatched {{ end }} in template conversion.")
@@ -505,6 +533,10 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
                 out.append("{% endif %}" if block == "if" else "{% endfor %}")
                 if block == "for" and context_stack:
                     context_stack.pop()
+                if block == "for" and index_var_stack:
+                    index_var_stack.pop()
+                if block == "for" and alias_stack:
+                    alias_stack.pop()
         else:
             out.append("{{ " + convert_expr(token) + " }}")
         pos = m.end()
