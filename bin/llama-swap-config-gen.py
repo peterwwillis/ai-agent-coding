@@ -705,8 +705,7 @@ def main() -> int:
     n_gpu_layers_arg = args.n_gpu_layers
     if args.gpu_layer_autodetect:
         if n_gpu_layers_arg is None:
-            n_gpu_layers_arg = "auto"
-            log("GPU layer autodetect enabled; using llama-server auto.")
+            log("GPU layer autodetect enabled; using GGUF block_count.")
         else:
             log("GPU layer autodetect enabled, but explicit n-gpu-layers provided; skipping auto.")
     else:
@@ -749,6 +748,16 @@ def main() -> int:
         log(f"Log file for '{name}': {log_file}")
 
         n_gpu_layers = n_gpu_layers_arg
+        if n_gpu_layers is None and args.gpu_layer_autodetect:
+            block_count = read_gguf_block_count(model_path)
+            if block_count:
+                n_gpu_layers = str(block_count)
+                log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers}")
+            else:
+                n_gpu_layers = DEFAULT_N_GPU_LAYERS
+                log(
+                    f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}."
+                )
         if n_gpu_layers is not None:
             log(f"Using n-gpu-layers for '{name}': {n_gpu_layers}")
 
