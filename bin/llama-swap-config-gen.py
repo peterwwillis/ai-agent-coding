@@ -397,7 +397,7 @@ def resolve_batch_settings(
     batch_arg: str,
     ubatch_arg: str,
     allow_equal: bool,
-    profile: HardwareProfile,
+    profile: Optional[HardwareProfile],
     model_path: Path,
     log,
 ) -> tuple[int, int]:
@@ -405,6 +405,8 @@ def resolve_batch_settings(
     auto_batch = None
     auto_ubatch = None
     if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+        if profile is None:
+            raise ValueError("auto batch sizing requires a detected hardware profile")
         auto_batch, auto_ubatch = auto_batch_settings(profile, model_size_gb, log)
     batch = auto_batch if batch_arg == BATCH_AUTO else int(batch_arg)
     ubatch = auto_ubatch if ubatch_arg == BATCH_AUTO else int(ubatch_arg)
@@ -521,10 +523,10 @@ def build_cmd(
     flash_attn: str,
     cache_type_k: str,
     cache_type_v: str,
-    n_gpu_layers: str,
+    n_gpu_layers: Optional[str],
     mmap: bool,
-    batch_size: int,
-    ubatch_size: int,
+    batch_size: Optional[int],
+    ubatch_size: Optional[int],
     log_file: Path,
 ) -> str:
     cmd_parts = [
@@ -540,19 +542,17 @@ def build_cmd(
         shlex.quote(str(model_path)),
         "--ctx-size",
         str(ctx_size),
-        "--batch-size",
-        str(batch_size),
-        "--ubatch-size",
-        str(ubatch_size),
         "--cache-type-k",
         shlex.quote(cache_type_k),
         "--cache-type-v",
         shlex.quote(cache_type_v),
-        "--n-gpu-layers",
-        str(n_gpu_layers),
         "--flash-attn",
         shlex.quote(flash_attn),
     ]
+    if batch_size is not None and ubatch_size is not None:
+        cmd_parts.extend(["--batch-size", str(batch_size), "--ubatch-size", str(ubatch_size)])
+    if n_gpu_layers is not None:
+        cmd_parts.extend(["--n-gpu-layers", str(n_gpu_layers)])
     cmd_parts.append("--mmap" if mmap else "--no-mmap")
     if thinking is not None:
         val = "true" if thinking else "false"
@@ -612,8 +612,13 @@ def main() -> int:
     parser.add_argument(
         "--n-gpu-layers",
         type=parse_n_gpu_layers,
-        default="auto",
-        help="Number of layers to offload to GPU (default: auto, uses model block_count).",
+        default=None,
+        help="Number of layers to offload to GPU (default: not passed unless set).",
+    )
+    parser.add_argument(
+        "--gpu-layer-autodetect",
+        action="store_true",
+        help="Auto-detect GPU layers from model metadata.",
     )
     parser.add_argument(
         "--mmap",
@@ -631,14 +636,19 @@ def main() -> int:
     parser.add_argument(
         "--batch-size",
         type=parse_batch_setting,
-        default=BATCH_AUTO,
-        help="Batch size (default: auto).",
+        default=None,
+        help="Batch size (default: not passed unless set).",
     )
     parser.add_argument(
         "--ubatch-size",
         type=parse_batch_setting,
-        default=BATCH_AUTO,
-        help="Ubatch size (default: auto).",
+        default=None,
+        help="Ubatch size (default: not passed unless set).",
+    )
+    parser.add_argument(
+        "--batch-size-autodetect",
+        action="store_true",
+        help="Auto-detect batch/ubatch size based on hardware and model.",
     )
     parser.add_argument(
         "--allow-equal-batch",
@@ -659,6 +669,16 @@ def main() -> int:
     args = parser.parse_args()
     log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else (lambda _msg: None)
 
+    if (args.batch_size == BATCH_AUTO or args.ubatch_size == BATCH_AUTO) and not args.batch_size_autodetect:
+        print(
+            "ERROR: batch size 'auto' requires --batch-size-autodetect.",
+            file=sys.stderr,
+        )
+        return 2
+    if (args.batch_size is None) != (args.ubatch_size is None):
+        print("ERROR: --batch-size and --ubatch-size must be provided together.", file=sys.stderr)
+        return 2
+
     log_dir = default_llama_cache_dir()
     try:
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -666,12 +686,34 @@ def main() -> int:
         print(f"ERROR: unable to create log directory: {log_dir} ({exc})", file=sys.stderr)
         return 2
 
-    hardware_profile = detect_hardware_profile(log)
-    if args.batch_size == BATCH_AUTO or args.ubatch_size == BATCH_AUTO:
-        vram_info = (
-            f", {hardware_profile.vram_gb:.1f} GB VRAM" if hardware_profile.vram_gb else ""
-        )
-        log(f"Auto batch profile: {hardware_profile.name}{vram_info}")
+    hardware_profile = None
+    batch_arg = args.batch_size
+    ubatch_arg = args.ubatch_size
+    if args.batch_size_autodetect:
+        if batch_arg is None and ubatch_arg is None:
+            batch_arg = BATCH_AUTO
+            ubatch_arg = BATCH_AUTO
+            log("Batch size autodetect enabled; using auto batch/ubatch.")
+        else:
+            log("Batch size autodetect enabled, but explicit batch/ubatch provided; skipping auto.")
+    else:
+        if batch_arg is None and ubatch_arg is None:
+            log("Batch/ubatch not provided; leaving llama-server defaults.")
+        else:
+            log("Using explicit batch/ubatch values; autodetect disabled.")
+
+    n_gpu_layers_arg = args.n_gpu_layers
+    if args.gpu_layer_autodetect:
+        if n_gpu_layers_arg is None:
+            n_gpu_layers_arg = "auto"
+            log("GPU layer autodetect enabled; using llama-server auto.")
+        else:
+            log("GPU layer autodetect enabled, but explicit n-gpu-layers provided; skipping auto.")
+    else:
+        if n_gpu_layers_arg is None:
+            log("n-gpu-layers not provided; leaving llama-server defaults.")
+        else:
+            log("Using explicit n-gpu-layers; autodetect disabled.")
 
     models_dir = Path(args.models_dir).expanduser()
     if not models_dir.is_dir():
@@ -706,32 +748,34 @@ def main() -> int:
         log_file = log_dir / f"llama-swap-{sanitize_log_stem(name)}.log"
         log(f"Log file for '{name}': {log_file}")
 
-        n_gpu_layers = args.n_gpu_layers
-        if n_gpu_layers == "auto":
-            block_count = read_gguf_block_count(model_path)
-            if block_count:
-                n_gpu_layers = str(block_count)
-                log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers}")
-            else:
-                n_gpu_layers = DEFAULT_N_GPU_LAYERS
-                log(
-                    f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}."
-                )
-        else:
-            log(f"Using explicit n-gpu-layers for '{name}': {n_gpu_layers}")
+        n_gpu_layers = n_gpu_layers_arg
+        if n_gpu_layers is not None:
+            log(f"Using n-gpu-layers for '{name}': {n_gpu_layers}")
 
-        try:
-            batch_size, ubatch_size = resolve_batch_settings(
-                args.batch_size,
-                args.ubatch_size,
-                args.allow_equal_batch,
-                hardware_profile,
-                model_path,
-                log,
-            )
-        except ValueError as exc:
-            print(f"ERROR: {exc} for model '{name}'", file=sys.stderr)
-            return 2
+        batch_size = None
+        ubatch_size = None
+        if batch_arg is not None and ubatch_arg is not None:
+            if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+                if hardware_profile is None:
+                    hardware_profile = detect_hardware_profile(log)
+                    vram_info = (
+                        f", {hardware_profile.vram_gb:.1f} GB VRAM"
+                        if hardware_profile.vram_gb
+                        else ""
+                    )
+                    log(f"Auto batch profile: {hardware_profile.name}{vram_info}")
+            try:
+                batch_size, ubatch_size = resolve_batch_settings(
+                    batch_arg,
+                    ubatch_arg,
+                    args.allow_equal_batch,
+                    hardware_profile,
+                    model_path,
+                    log,
+                )
+            except ValueError as exc:
+                print(f"ERROR: {exc} for model '{name}'", file=sys.stderr)
+                return 2
 
         thinking_optional = template_supports_thinking(model_path)
         log(f"Adding model '{name}' (thinking optional: {'yes' if thinking_optional else 'no'}).")
