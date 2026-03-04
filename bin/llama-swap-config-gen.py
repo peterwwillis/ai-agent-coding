@@ -172,6 +172,40 @@ def existing_model_keys(lines: List[str], start: int, end: int) -> set[str]:
     return keys
 
 
+def parse_models_entries(lines: List[str], start: int, end: int) -> List[tuple[str, int, int]]:
+    entries: List[tuple[str, int, int]] = []
+    i = start + 1
+    while i < end:
+        line = lines[i]
+        if (
+            line.startswith("  ")
+            and not line.startswith("    ")
+            and line.strip()
+            and not line.lstrip().startswith("#")
+        ):
+            stripped = line.strip()
+            if stripped.endswith(":") and not stripped.startswith("-"):
+                key = normalize_yaml_key_text(stripped[:-1].strip())
+                entry_start = i
+                i += 1
+                while i < end:
+                    next_line = lines[i]
+                    if (
+                        next_line.startswith("  ")
+                        and not next_line.startswith("    ")
+                        and next_line.strip()
+                        and not next_line.lstrip().startswith("#")
+                    ):
+                        if next_line.strip().endswith(":") and not next_line.strip().startswith("-"):
+                            break
+                    i += 1
+                entry_end = i
+                entries.append((key, entry_start, entry_end))
+                continue
+        i += 1
+    return entries
+
+
 def read_header(template_path: Optional[Path]) -> List[str]:
     if not template_path or not template_path.is_file():
         return ["models:"]
@@ -301,6 +335,11 @@ def main() -> int:
         action="store_true",
         help="Print progress to stderr.",
     )
+    parser.add_argument(
+        "--prune-missing",
+        action="store_true",
+        help="Remove model entries not present in the llama.cpp cache.",
+    )
 
     args = parser.parse_args()
     log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else (lambda _msg: None)
@@ -384,6 +423,30 @@ def main() -> int:
     out_path = Path(args.output).expanduser()
     if out_path.exists():
         existing_lines = out_path.read_text(encoding="utf-8").splitlines()
+        start, end = find_models_block(existing_lines)
+        if start is None:
+            if existing_lines and existing_lines[-1].strip():
+                existing_lines.append("")
+            existing_lines.append("models:")
+            start = len(existing_lines) - 1
+            end = len(existing_lines)
+
+        if start is not None and args.prune_missing:
+            entries_meta = parse_models_entries(existing_lines, start, end)
+            desired = {name for name, _block in entry_blocks}
+            keep = [True] * len(existing_lines)
+            removed = 0
+            for key, entry_start, entry_end in entries_meta:
+                if key in desired:
+                    continue
+                for idx in range(entry_start, entry_end):
+                    keep[idx] = False
+                removed += 1
+            if removed:
+                existing_lines = [line for idx, line in enumerate(existing_lines) if keep[idx]]
+                start, end = find_models_block(existing_lines)
+                log(f"Pruned {removed} missing model entr{'y' if removed == 1 else 'ies'}.")
+
         start, end = find_models_block(existing_lines)
         if start is None:
             if existing_lines and existing_lines[-1].strip():
