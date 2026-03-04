@@ -7,8 +7,29 @@ import platform
 import shlex
 import struct
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
+
+DEFAULT_N_GPU_LAYERS = "40"
+LOG_NAME_MAX = 64
+BATCH_AUTO = "auto"
+
+HELP_EPILOG = """Batch/ubatch guidance
+
+Hardware Type                            Recommended -b   Recommended -ub   Why?
+High-End GPU (e.g., RTX 4090)            4096              1024 - 2048        Fully utilizes many CUDA cores; 2048 can reduce prompt processing time by ~25%.
+Mid-Range GPU (8GB-12GB VRAM)           2048              512                Prevents OOM (Out of Memory) while maintaining decent speeds.
+CPU / Mixed Inference                   2048              1024               Can provide up to a 3x speed gain for MoE models (like Mixtral).
+Apple Silicon (M2/M3 Max)               4096              1024               Efficiently uses high unified memory bandwidth.
+
+Optimization Strategy
+  For Speed (Prompt Processing): Increase -ub. Larger values allow the GPU to process more prompt tokens in parallel, though the benefit often plateaus at 2048.
+  For Memory (VRAM Constraints): Decrease -b and -ub. High values allocate more memory for the logits/embeddings buffer. If you hit an OOM error, lower both values to 512 or 256.
+  Special Case (Embeddings/Reranking): You must set -b and -ub to the same value, or the server may fail.
+
+Start with -b 2048 -ub 512. If your GPU memory (VRAM) is less than 50% full during processing, try doubling -ub to 1024 and check if your "tokens per second" (TPS) for prompt processing increases.
+"""
 
 
 def default_llama_cache_dir() -> Path:
@@ -103,6 +124,101 @@ def read_gguf_chat_template(path: Path) -> Optional[str]:
     return None
 
 
+def read_gguf_block_count(path: Path) -> Optional[int]:
+    gguf_types = {
+        0: 1,  # UINT8
+        1: 1,  # INT8
+        2: 2,  # UINT16
+        3: 2,  # INT16
+        4: 4,  # UINT32
+        5: 4,  # INT32
+        6: 4,  # FLOAT32
+        7: 1,  # BOOL
+        10: 8,  # UINT64
+        11: 8,  # INT64
+        12: 8,  # FLOAT64
+    }
+    int_types = {
+        0: "<B",
+        1: "<b",
+        2: "<H",
+        3: "<h",
+        4: "<I",
+        5: "<i",
+        10: "<Q",
+        11: "<q",
+    }
+
+    def read_u32(f) -> int:
+        data = f.read(4)
+        if len(data) != 4:
+            raise EOFError
+        return struct.unpack("<I", data)[0]
+
+    def read_u64(f) -> int:
+        data = f.read(8)
+        if len(data) != 8:
+            raise EOFError
+        return struct.unpack("<Q", data)[0]
+
+    def read_str(f) -> str:
+        length = read_u64(f)
+        data = f.read(length)
+        if len(data) != length:
+            raise EOFError
+        return data.decode("utf-8", errors="replace")
+
+    def read_int_value(f, vtype: int) -> Optional[int]:
+        fmt = int_types.get(vtype)
+        if not fmt:
+            return None
+        size = struct.calcsize(fmt)
+        data = f.read(size)
+        if len(data) != size:
+            raise EOFError
+        return int(struct.unpack(fmt, data)[0])
+
+    def skip_value(f, vtype: int):
+        if vtype in gguf_types:
+            f.seek(gguf_types[vtype], os.SEEK_CUR)
+            return
+        if vtype == 8:  # STRING
+            length = read_u64(f)
+            f.seek(length, os.SEEK_CUR)
+            return
+        if vtype == 9:  # ARRAY
+            elem_type = read_u32(f)
+            count = read_u64(f)
+            for _ in range(count):
+                skip_value(f, elem_type)
+            return
+        raise ValueError(f"Unsupported GGUF value type: {vtype}")
+
+    try:
+        if not path.is_file():
+            return None
+        with path.open("rb") as f:
+            if f.read(4) != b"GGUF":
+                return None
+            _version = read_u32(f)
+            _tensor_count = read_u64(f)
+            kv_count = read_u64(f)
+            for _ in range(kv_count):
+                key = read_str(f)
+                vtype = read_u32(f)
+                if key.endswith(".block_count") or key in {"block_count", "n_layer"}:
+                    value = read_int_value(f, vtype)
+                    if value is None:
+                        skip_value(f, vtype)
+                        return None
+                    return value
+                skip_value(f, vtype)
+    except Exception:
+        return None
+
+    return None
+
+
 def template_supports_thinking(path: Path) -> bool:
     template = read_gguf_chat_template(path)
     if not template:
@@ -125,6 +241,14 @@ def normalize_yaml_key_text(key: str) -> str:
     return key
 
 
+def sanitize_log_stem(name: str) -> str:
+    cleaned = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)
+    cleaned = cleaned.strip("._-")
+    if not cleaned:
+        return "model"
+    return cleaned[:LOG_NAME_MAX]
+
+
 def parse_n_gpu_layers(value: str) -> str:
     v = value.strip().lower()
     if v == "auto":
@@ -132,6 +256,138 @@ def parse_n_gpu_layers(value: str) -> str:
     if v.isdigit():
         return str(int(v))
     raise argparse.ArgumentTypeError("n-gpu-layers must be an integer or 'auto'")
+
+
+def parse_batch_setting(value: str) -> str:
+    v = value.strip().lower()
+    if v == BATCH_AUTO:
+        return v
+    if v.isdigit() and int(v) > 0:
+        return str(int(v))
+    raise argparse.ArgumentTypeError("batch size must be a positive integer or 'auto'")
+
+
+@dataclass(frozen=True)
+class HardwareProfile:
+    name: str
+    batch: int
+    ubatch: int
+    vram_gb: Optional[float] = None
+
+
+def read_int_file(path: Path) -> Optional[int]:
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def read_nvidia_vram_bytes() -> Optional[int]:
+    base = Path("/proc/driver/nvidia/gpus")
+    if not base.is_dir():
+        return None
+    for info in base.glob("*/information"):
+        try:
+            for line in info.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if "Video Memory" in line:
+                    _, value = line.split(":", 1)
+                    parts = value.strip().split()
+                    if len(parts) >= 2 and parts[0].isdigit():
+                        size = int(parts[0])
+                        unit = parts[1].lower()
+                        if unit.startswith("mb"):
+                            return size * 1024 * 1024
+                        if unit.startswith("gb"):
+                            return size * 1024 * 1024 * 1024
+        except OSError:
+            continue
+    return None
+
+
+def detect_linux_gpu() -> tuple[Optional[str], Optional[int]]:
+    drm = Path("/sys/class/drm")
+    if not drm.is_dir():
+        return None, None
+    for vendor_path in drm.glob("card*/device/vendor"):
+        try:
+            vendor = vendor_path.read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            continue
+        device_dir = vendor_path.parent
+        if vendor == "0x1002":
+            vram_bytes = read_int_file(device_dir / "mem_info_vram_total")
+            return "amd", vram_bytes
+        if vendor == "0x10de":
+            vram_bytes = read_nvidia_vram_bytes()
+            return "nvidia", vram_bytes
+        if vendor == "0x8086":
+            return "intel", None
+    return None, None
+
+
+def detect_hardware_profile() -> HardwareProfile:
+    system = platform.system()
+    machine = platform.machine().lower()
+    if system == "Darwin" and machine in {"arm64", "aarch64"}:
+        return HardwareProfile("apple-silicon", 4096, 1024)
+    if system == "Linux":
+        vendor, vram_bytes = detect_linux_gpu()
+        vram_gb = vram_bytes / (1024**3) if vram_bytes else None
+        if vendor in {"amd", "nvidia"}:
+            if vram_gb is not None and vram_gb >= 20:
+                return HardwareProfile("high-end-gpu", 4096, 1024, vram_gb)
+            if vram_gb is not None and vram_gb >= 8:
+                return HardwareProfile("mid-range-gpu", 2048, 512, vram_gb)
+            if vram_gb is not None and vram_gb < 8:
+                return HardwareProfile("low-vram-gpu", 1024, 256, vram_gb)
+            return HardwareProfile("mid-range-gpu", 2048, 512, vram_gb)
+        if vendor == "intel":
+            return HardwareProfile("cpu/mixed", 2048, 1024)
+    return HardwareProfile("cpu/mixed", 2048, 1024)
+
+
+def auto_batch_settings(profile: HardwareProfile, model_size_gb: float) -> tuple[int, int]:
+    batch = profile.batch
+    ubatch = profile.ubatch
+    if model_size_gb >= 20:
+        batch = min(batch, 2048)
+        ubatch = min(ubatch, 512)
+    elif model_size_gb >= 12:
+        batch = min(batch, 2048)
+        ubatch = min(ubatch, 512)
+    elif model_size_gb <= 4:
+        if batch >= 4096:
+            ubatch = max(ubatch, 2048)
+        elif batch >= 2048:
+            ubatch = max(ubatch, 1024)
+    if batch <= ubatch:
+        batch = max(ubatch + 1, ubatch * 2)
+    return batch, ubatch
+
+
+def resolve_batch_settings(
+    batch_arg: str,
+    ubatch_arg: str,
+    allow_equal: bool,
+    profile: HardwareProfile,
+    model_path: Path,
+    log,
+) -> tuple[int, int]:
+    model_size_gb = model_path.stat().st_size / (1024**3)
+    auto_batch, auto_ubatch = auto_batch_settings(profile, model_size_gb)
+    batch = auto_batch if batch_arg == BATCH_AUTO else int(batch_arg)
+    ubatch = auto_ubatch if ubatch_arg == BATCH_AUTO else int(ubatch_arg)
+    if allow_equal:
+        if batch < ubatch:
+            raise ValueError("batch size must be greater than or equal to ubatch size")
+    else:
+        if batch <= ubatch:
+            raise ValueError("batch size must be greater than ubatch size")
+    if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+        log(
+            f"Auto batch settings for '{model_path.name}': -b {batch} -ub {ubatch} (profile: {profile.name}, model {model_size_gb:.1f} GB)"
+        )
+    return batch, ubatch
 
 
 def parse_flash_attn(value: str) -> str:
@@ -232,16 +488,26 @@ def build_cmd(
     n_gpu_layers: str,
     mmap: bool,
     batch_size: int,
+    ubatch_size: int,
+    log_file: Path,
 ) -> str:
     cmd_parts = [
         shlex.quote(llama_server),
         "--offline",
+        "--log-file",
+        shlex.quote(str(log_file)),
+        "--log-colors",
+        "off",
+        "--log-prefix",
+        "--log-timestamps",
         "-m",
         shlex.quote(str(model_path)),
         "--ctx-size",
         str(ctx_size),
         "--batch-size",
         str(batch_size),
+        "--ubatch-size",
+        str(ubatch_size),
         "--cache-type-k",
         shlex.quote(cache_type_k),
         "--cache-type-v",
@@ -261,7 +527,9 @@ def build_cmd(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Generate a llama-swap config from llama.cpp cached GGUF models."
+        description="Generate a llama-swap config from llama.cpp cached GGUF models.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=HELP_EPILOG,
     )
     parser.add_argument(
         "--llama-server",
@@ -308,8 +576,8 @@ def main() -> int:
     parser.add_argument(
         "--n-gpu-layers",
         type=parse_n_gpu_layers,
-        default="40",
-        help="Number of layers to offload to GPU (default: 40).",
+        default="auto",
+        help="Number of layers to offload to GPU (default: auto, uses model block_count).",
     )
     parser.add_argument(
         "--mmap",
@@ -326,9 +594,20 @@ def main() -> int:
     )
     parser.add_argument(
         "--batch-size",
-        type=int,
-        default=256,
-        help="Batch size (default: 256).",
+        type=parse_batch_setting,
+        default=BATCH_AUTO,
+        help="Batch size (default: auto).",
+    )
+    parser.add_argument(
+        "--ubatch-size",
+        type=parse_batch_setting,
+        default=BATCH_AUTO,
+        help="Ubatch size (default: auto).",
+    )
+    parser.add_argument(
+        "--allow-equal-batch",
+        action="store_true",
+        help="Allow batch size to equal ubatch size (for embeddings/reranking).",
     )
     parser.add_argument(
         "--verbose",
@@ -343,6 +622,20 @@ def main() -> int:
 
     args = parser.parse_args()
     log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else (lambda _msg: None)
+
+    log_dir = default_llama_cache_dir()
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"ERROR: unable to create log directory: {log_dir} ({exc})", file=sys.stderr)
+        return 2
+
+    hardware_profile = detect_hardware_profile()
+    if args.batch_size == BATCH_AUTO or args.ubatch_size == BATCH_AUTO:
+        vram_info = (
+            f", {hardware_profile.vram_gb:.1f} GB VRAM" if hardware_profile.vram_gb else ""
+        )
+        log(f"Auto batch profile: {hardware_profile.name}{vram_info}")
 
     models_dir = Path(args.models_dir).expanduser()
     if not models_dir.is_dir():
@@ -374,6 +667,32 @@ def main() -> int:
         count = used_names.get(base_name, 0) + 1
         used_names[base_name] = count
         name = base_name if count == 1 else f"{base_name}-{count}"
+        log_file = log_dir / f"llama-swap-{sanitize_log_stem(name)}.log"
+
+        n_gpu_layers = args.n_gpu_layers
+        if n_gpu_layers == "auto":
+            block_count = read_gguf_block_count(model_path)
+            if block_count:
+                n_gpu_layers = str(block_count)
+                log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers}")
+            else:
+                n_gpu_layers = DEFAULT_N_GPU_LAYERS
+                log(
+                    f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}."
+                )
+
+        try:
+            batch_size, ubatch_size = resolve_batch_settings(
+                args.batch_size,
+                args.ubatch_size,
+                args.allow_equal_batch,
+                hardware_profile,
+                model_path,
+                log,
+            )
+        except ValueError as exc:
+            print(f"ERROR: {exc} for model '{name}'", file=sys.stderr)
+            return 2
 
         thinking_optional = template_supports_thinking(model_path)
         log(f"Adding model '{name}' (thinking optional: {'yes' if thinking_optional else 'no'}).")
@@ -383,7 +702,7 @@ def main() -> int:
                     name,
                     [
                         f"  {yaml_key(name)}:",
-                        f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
                     ],
                 )
             )
@@ -392,7 +711,7 @@ def main() -> int:
                     f"{name}-thinking",
                     [
                         f"  {yaml_key(name)}-thinking:",
-                        f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
                     ],
                 )
             )
@@ -402,7 +721,7 @@ def main() -> int:
                     name,
                     [
                         f"  {yaml_key(name)}:",
-                        f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
                     ],
                 )
             )
