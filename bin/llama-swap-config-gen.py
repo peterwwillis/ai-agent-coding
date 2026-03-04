@@ -304,64 +304,92 @@ def read_nvidia_vram_bytes() -> Optional[int]:
     return None
 
 
-def detect_linux_gpu() -> tuple[Optional[str], Optional[int]]:
+def detect_linux_gpu(log) -> tuple[Optional[str], Optional[int]]:
     drm = Path("/sys/class/drm")
     if not drm.is_dir():
+        log("No /sys/class/drm detected; skipping GPU vendor detection.")
         return None, None
     for vendor_path in drm.glob("card*/device/vendor"):
         try:
             vendor = vendor_path.read_text(encoding="utf-8").strip().lower()
         except OSError:
             continue
+        log(f"Detected DRM vendor {vendor} at {vendor_path.parent}")
         device_dir = vendor_path.parent
         if vendor == "0x1002":
             vram_bytes = read_int_file(device_dir / "mem_info_vram_total")
+            if vram_bytes:
+                log(f"AMD VRAM total: {vram_bytes / (1024**3):.1f} GB")
+            else:
+                log("AMD VRAM total not available from mem_info_vram_total.")
             return "amd", vram_bytes
         if vendor == "0x10de":
             vram_bytes = read_nvidia_vram_bytes()
+            if vram_bytes:
+                log(f"NVIDIA VRAM total: {vram_bytes / (1024**3):.1f} GB")
+            else:
+                log("NVIDIA VRAM total not available from /proc/driver/nvidia/gpus.")
             return "nvidia", vram_bytes
         if vendor == "0x8086":
+            log("Intel GPU detected; treating as mixed inference profile.")
             return "intel", None
     return None, None
 
 
-def detect_hardware_profile() -> HardwareProfile:
+def detect_hardware_profile(log) -> HardwareProfile:
     system = platform.system()
     machine = platform.machine().lower()
+    log(f"Platform: {system} ({machine})")
     if system == "Darwin" and machine in {"arm64", "aarch64"}:
+        log("Apple Silicon detected; using Apple Silicon batch profile.")
         return HardwareProfile("apple-silicon", 4096, 1024)
     if system == "Linux":
-        vendor, vram_bytes = detect_linux_gpu()
+        vendor, vram_bytes = detect_linux_gpu(log)
         vram_gb = vram_bytes / (1024**3) if vram_bytes else None
         if vendor in {"amd", "nvidia"}:
             if vram_gb is not None and vram_gb >= 20:
+                log("High-end GPU detected; using 4096/1024 batch profile.")
                 return HardwareProfile("high-end-gpu", 4096, 1024, vram_gb)
             if vram_gb is not None and vram_gb >= 8:
+                log("Mid-range GPU detected; using 2048/512 batch profile.")
                 return HardwareProfile("mid-range-gpu", 2048, 512, vram_gb)
             if vram_gb is not None and vram_gb < 8:
+                log("Low VRAM GPU detected; using 1024/256 batch profile.")
                 return HardwareProfile("low-vram-gpu", 1024, 256, vram_gb)
+            log("GPU detected without VRAM info; using mid-range GPU profile.")
             return HardwareProfile("mid-range-gpu", 2048, 512, vram_gb)
         if vendor == "intel":
+            log("Intel GPU detected; using CPU/mixed batch profile.")
             return HardwareProfile("cpu/mixed", 2048, 1024)
+        log("No discrete GPU detected; using CPU/mixed batch profile.")
     return HardwareProfile("cpu/mixed", 2048, 1024)
 
 
-def auto_batch_settings(profile: HardwareProfile, model_size_gb: float) -> tuple[int, int]:
+def auto_batch_settings(profile: HardwareProfile, model_size_gb: float, log) -> tuple[int, int]:
     batch = profile.batch
     ubatch = profile.ubatch
+    log(f"Auto batch baseline from profile '{profile.name}': -b {batch} -ub {ubatch}")
+    log(f"Model size: {model_size_gb:.1f} GB")
     if model_size_gb >= 20:
         batch = min(batch, 2048)
         ubatch = min(ubatch, 512)
+        log("Model >= 20 GB; capping batch/ubatch to 2048/512.")
     elif model_size_gb >= 12:
         batch = min(batch, 2048)
         ubatch = min(ubatch, 512)
+        log("Model >= 12 GB; capping batch/ubatch to 2048/512.")
     elif model_size_gb <= 4:
         if batch >= 4096:
             ubatch = max(ubatch, 2048)
+            log("Small model; increasing ubatch to at least 2048.")
         elif batch >= 2048:
             ubatch = max(ubatch, 1024)
+            log("Small model; increasing ubatch to at least 1024.")
+    else:
+        log("No size-based batch adjustments needed.")
     if batch <= ubatch:
         batch = max(ubatch + 1, ubatch * 2)
+        log(f"Adjusted batch to keep batch > ubatch: -b {batch} -ub {ubatch}")
     return batch, ubatch
 
 
@@ -374,10 +402,18 @@ def resolve_batch_settings(
     log,
 ) -> tuple[int, int]:
     model_size_gb = model_path.stat().st_size / (1024**3)
-    auto_batch, auto_ubatch = auto_batch_settings(profile, model_size_gb)
+    auto_batch = None
+    auto_ubatch = None
+    if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+        auto_batch, auto_ubatch = auto_batch_settings(profile, model_size_gb, log)
     batch = auto_batch if batch_arg == BATCH_AUTO else int(batch_arg)
     ubatch = auto_ubatch if ubatch_arg == BATCH_AUTO else int(ubatch_arg)
+    if batch_arg != BATCH_AUTO:
+        log(f"Using explicit batch size: -b {batch}")
+    if ubatch_arg != BATCH_AUTO:
+        log(f"Using explicit ubatch size: -ub {ubatch}")
     if allow_equal:
+        log("Allowing batch == ubatch for embeddings/reranking mode.")
         if batch < ubatch:
             raise ValueError("batch size must be greater than or equal to ubatch size")
     else:
@@ -630,7 +666,7 @@ def main() -> int:
         print(f"ERROR: unable to create log directory: {log_dir} ({exc})", file=sys.stderr)
         return 2
 
-    hardware_profile = detect_hardware_profile()
+    hardware_profile = detect_hardware_profile(log)
     if args.batch_size == BATCH_AUTO or args.ubatch_size == BATCH_AUTO:
         vram_info = (
             f", {hardware_profile.vram_gb:.1f} GB VRAM" if hardware_profile.vram_gb else ""
@@ -668,6 +704,7 @@ def main() -> int:
         used_names[base_name] = count
         name = base_name if count == 1 else f"{base_name}-{count}"
         log_file = log_dir / f"llama-swap-{sanitize_log_stem(name)}.log"
+        log(f"Log file for '{name}': {log_file}")
 
         n_gpu_layers = args.n_gpu_layers
         if n_gpu_layers == "auto":
@@ -680,6 +717,8 @@ def main() -> int:
                 log(
                     f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}."
                 )
+        else:
+            log(f"Using explicit n-gpu-layers for '{name}': {n_gpu_layers}")
 
         try:
             batch_size, ubatch_size = resolve_batch_settings(
