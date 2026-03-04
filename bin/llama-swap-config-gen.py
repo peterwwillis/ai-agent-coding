@@ -111,6 +111,21 @@ def yaml_key(name: str) -> str:
     return name if safe else "'" + name.replace("'", "''") + "'"
 
 
+def normalize_cache_type(value: str) -> str:
+    if value == "q8":
+        return "q8_0"
+    return value
+
+
+def parse_n_gpu_layers(value: str) -> str:
+    v = value.strip().lower()
+    if v == "auto" or v == "all":
+        return v
+    if v.isdigit():
+        return str(int(v))
+    raise argparse.ArgumentTypeError("n-gpu-layers must be an integer, 'auto', or 'all'")
+
+
 def read_header(template_path: Optional[Path]) -> List[str]:
     if not template_path or not template_path.is_file():
         return ["models:"]
@@ -125,13 +140,39 @@ def read_header(template_path: Optional[Path]) -> List[str]:
     return header
 
 
-def build_cmd(llama_server: str, model_path: Path, thinking: Optional[bool]) -> str:
+def build_cmd(
+    llama_server: str,
+    model_path: Path,
+    thinking: Optional[bool],
+    ctx_size: int,
+    flash_attn: bool,
+    cache_type_k: str,
+    cache_type_v: str,
+    n_gpu_layers: str,
+    mmap: bool,
+    batch_size: int,
+) -> str:
+    cache_type_k = normalize_cache_type(cache_type_k)
+    cache_type_v = normalize_cache_type(cache_type_v)
     cmd_parts = [
         shlex.quote(llama_server),
         "--offline",
         "-m",
         shlex.quote(str(model_path)),
+        "--ctx-size",
+        str(ctx_size),
+        "--batch-size",
+        str(batch_size),
+        "--cache-type-k",
+        shlex.quote(cache_type_k),
+        "--cache-type-v",
+        shlex.quote(cache_type_v),
+        "--n-gpu-layers",
+        str(n_gpu_layers),
     ]
+    if flash_attn:
+        cmd_parts.append("--flash-attn")
+    cmd_parts.append("--mmap" if mmap else "--no-mmap")
     if thinking is not None:
         val = "true" if thinking else "false"
         cmd_parts.extend(["--chat-template-kwargs", f"'{{\"enable_thinking\":{val}}}'"])
@@ -161,27 +202,82 @@ def main() -> int:
     parser.add_argument(
         "--template",
         default=None,
-        help="Optional header template file (default: llama-swap.yaml.example next to this script).",
+        help="Optional header template file (default: llama-swap.yml next to this script).",
+    )
+    parser.add_argument(
+        "--ctx-size",
+        type=int,
+        default=2048,
+        help="Context size (default: 2048).",
+    )
+    parser.add_argument(
+        "--flash-attn",
+        action="store_true",
+        help="Enable flash attention (default: disabled).",
+    )
+    parser.add_argument(
+        "--cache-type-k",
+        default="q8",
+        help="KV cache K quantization type (default: q8).",
+    )
+    parser.add_argument(
+        "--cache-type-v",
+        default="q8",
+        help="KV cache V quantization type (default: q8).",
+    )
+    parser.add_argument(
+        "--n-gpu-layers",
+        type=parse_n_gpu_layers,
+        default="auto",
+        help="Number of layers to offload to GPU (default: auto).",
+    )
+    parser.add_argument(
+        "--mmap",
+        dest="mmap",
+        action="store_true",
+        default=True,
+        help="Enable memory-mapped model loading (default).",
+    )
+    parser.add_argument(
+        "--no-mmap",
+        dest="mmap",
+        action="store_false",
+        help="Disable memory-mapped model loading.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=256,
+        help="Batch size (default: 256).",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print progress to stderr.",
     )
 
     args = parser.parse_args()
+    log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else (lambda _msg: None)
 
     models_dir = Path(args.models_dir).expanduser()
     if not models_dir.is_dir():
         print(f"ERROR: models directory not found: {models_dir}", file=sys.stderr)
         return 2
 
+    log(f"Scanning for .gguf models under: {models_dir}")
     ggufs = sorted(p for p in models_dir.rglob("*.gguf") if p.is_file())
     if not ggufs:
         print(f"ERROR: no .gguf files found under: {models_dir}", file=sys.stderr)
         return 3
+    log(f"Found {len(ggufs)} .gguf model(s).")
 
     template_path = (
         Path(args.template).expanduser()
         if args.template
-        else Path(__file__).with_name("llama-swap.yaml.example")
+        else Path(__file__).with_name("llama-swap.yml")
     )
     header_lines = read_header(template_path)
+    log(f"Using template header from: {template_path}")
 
     used_names = {}
     entries: List[str] = []
@@ -192,15 +288,22 @@ def main() -> int:
         name = base_name if count == 1 else f"{base_name}-{count}"
 
         thinking_optional = template_supports_thinking(model_path)
+        log(f"Adding model '{name}' (thinking optional: {'yes' if thinking_optional else 'no'}).")
         if thinking_optional:
             entries.append(f"  {yaml_key(name)}:")
-            entries.append(f"    cmd: {build_cmd(args.llama_server, model_path, False)}")
+            entries.append(
+                f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}"
+            )
             entries.append("")
             entries.append(f"  {yaml_key(name)}-thinking:")
-            entries.append(f"    cmd: {build_cmd(args.llama_server, model_path, True)}")
+            entries.append(
+                f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}"
+            )
         else:
             entries.append(f"  {yaml_key(name)}:")
-            entries.append(f"    cmd: {build_cmd(args.llama_server, model_path, None)}")
+            entries.append(
+                f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}"
+            )
         entries.append("")
 
     output_lines = header_lines + [""] + entries
@@ -210,8 +313,10 @@ def main() -> int:
         out_path = Path(args.output).expanduser()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(text, encoding="utf-8")
+        log(f"Wrote config to: {out_path}")
     else:
         sys.stdout.write(text)
+        log("Wrote config to stdout.")
 
     return 0
 
