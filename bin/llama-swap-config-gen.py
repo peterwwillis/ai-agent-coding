@@ -25,6 +25,10 @@ def default_llama_cache_dir() -> Path:
     return Path.home() / ".cache" / "llama.cpp"
 
 
+def default_llama_swap_config_path() -> Path:
+    return Path.home() / ".config" / "llama-swap" / "config.yaml"
+
+
 def read_gguf_chat_template(path: Path) -> Optional[str]:
     gguf_types = {
         0: 1,  # UINT8
@@ -111,6 +115,16 @@ def yaml_key(name: str) -> str:
     return name if safe else "'" + name.replace("'", "''") + "'"
 
 
+def normalize_yaml_key_text(key: str) -> str:
+    key = key.strip()
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in ("'", '"'):
+        inner = key[1:-1]
+        if key[0] == "'":
+            return inner.replace("''", "'")
+        return inner.replace('\\"', '"')
+    return key
+
+
 def normalize_cache_type(value: str) -> str:
     if value == "q8":
         return "q8_0"
@@ -119,11 +133,43 @@ def normalize_cache_type(value: str) -> str:
 
 def parse_n_gpu_layers(value: str) -> str:
     v = value.strip().lower()
-    if v == "auto" or v == "all":
+    if v == "auto":
         return v
     if v.isdigit():
         return str(int(v))
-    raise argparse.ArgumentTypeError("n-gpu-layers must be an integer, 'auto', or 'all'")
+    raise argparse.ArgumentTypeError("n-gpu-layers must be an integer or 'auto'")
+
+
+def find_models_block(lines: List[str]) -> tuple[Optional[int], int]:
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith("models:"):
+            start = i
+            break
+    if start is None:
+        return None, len(lines)
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        stripped = lines[j].lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not lines[j].startswith(" "):
+            end = j
+            break
+    return start, end
+
+
+def existing_model_keys(lines: List[str], start: int, end: int) -> set[str]:
+    keys: set[str] = set()
+    for line in lines[start + 1 : end]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith("  ") and not line.startswith("    "):
+            stripped = line.strip()
+            if stripped.endswith(":") and not stripped.startswith("-"):
+                key = stripped[:-1].strip()
+                keys.add(normalize_yaml_key_text(key))
+    return keys
 
 
 def read_header(template_path: Optional[Path]) -> List[str]:
@@ -196,13 +242,13 @@ def main() -> int:
     )
     parser.add_argument(
         "--output",
-        default=os.environ.get("LLAMA_SWAP_CONFIG"),
-        help="Write output YAML to this path (default: stdout).",
+        default=os.environ.get("LLAMA_SWAP_CONFIG", str(default_llama_swap_config_path())),
+        help="Write output YAML to this path (use '-' for stdout).",
     )
     parser.add_argument(
         "--template",
         default=None,
-        help="Optional header template file (default: llama-swap.yml next to this script).",
+        help="Optional header template file (default: llama-swap.yaml.example next to this script).",
     )
     parser.add_argument(
         "--ctx-size",
@@ -277,10 +323,13 @@ def main() -> int:
         else Path(__file__).with_name("llama-swap.yml")
     )
     header_lines = read_header(template_path)
-    log(f"Using template header from: {template_path}")
+    if template_path.is_file():
+        log(f"Using template header from: {template_path}")
+    else:
+        log("Template header not found; using minimal header.")
 
     used_names = {}
-    entries: List[str] = []
+    entry_blocks: List[tuple[str, List[str]]] = []
     for model_path in ggufs:
         base_name = model_path.stem
         count = used_names.get(base_name, 0) + 1
@@ -290,33 +339,84 @@ def main() -> int:
         thinking_optional = template_supports_thinking(model_path)
         log(f"Adding model '{name}' (thinking optional: {'yes' if thinking_optional else 'no'}).")
         if thinking_optional:
-            entries.append(f"  {yaml_key(name)}:")
-            entries.append(
-                f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}"
+            entry_blocks.append(
+                (
+                    name,
+                    [
+                        f"  {yaml_key(name)}:",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}",
+                    ],
+                )
             )
-            entries.append("")
-            entries.append(f"  {yaml_key(name)}-thinking:")
-            entries.append(
-                f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}"
+            entry_blocks.append(
+                (
+                    f"{name}-thinking",
+                    [
+                        f"  {yaml_key(name)}-thinking:",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}",
+                    ],
+                )
             )
         else:
-            entries.append(f"  {yaml_key(name)}:")
-            entries.append(
-                f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}"
+            entry_blocks.append(
+                (
+                    name,
+                    [
+                        f"  {yaml_key(name)}:",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, args.n_gpu_layers, args.mmap, args.batch_size)}",
+                    ],
+                )
             )
+
+    entries: List[str] = []
+    for _name, block in entry_blocks:
+        entries.extend(block)
         entries.append("")
 
     output_lines = header_lines + [""] + entries
     text = "\n".join(output_lines).rstrip() + "\n"
 
-    if args.output:
-        out_path = Path(args.output).expanduser()
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(text, encoding="utf-8")
-        log(f"Wrote config to: {out_path}")
-    else:
+    if args.output == "-":
         sys.stdout.write(text)
         log("Wrote config to stdout.")
+        return 0
+
+    out_path = Path(args.output).expanduser()
+    if out_path.exists():
+        existing_lines = out_path.read_text(encoding="utf-8").splitlines()
+        start, end = find_models_block(existing_lines)
+        if start is None:
+            if existing_lines and existing_lines[-1].strip():
+                existing_lines.append("")
+            existing_lines.append("models:")
+            start = len(existing_lines) - 1
+            end = len(existing_lines)
+
+        existing = existing_model_keys(existing_lines, start, end)
+        lines_to_add: List[str] = []
+        added = 0
+        for entry_name, block in entry_blocks:
+            if entry_name in existing:
+                continue
+            if lines_to_add:
+                lines_to_add.append("")
+            lines_to_add.extend(block)
+            added += 1
+
+        if not lines_to_add:
+            log(f"No new entries to add; leaving config unchanged: {out_path}")
+            return 0
+
+        if end > start + 1 and existing_lines[end - 1].strip():
+            lines_to_add = [""] + lines_to_add
+        existing_lines[end:end] = lines_to_add
+        new_text = "\n".join(existing_lines).rstrip() + "\n"
+        out_path.write_text(new_text, encoding="utf-8")
+        log(f"Updated config at: {out_path} (added {added} entr{'y' if added == 1 else 'ies'}).")
+    else:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(text, encoding="utf-8")
+        log(f"Wrote new config to: {out_path}")
 
     return 0
 
