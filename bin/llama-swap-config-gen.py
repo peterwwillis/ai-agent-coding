@@ -125,12 +125,6 @@ def normalize_yaml_key_text(key: str) -> str:
     return key
 
 
-def normalize_cache_type(value: str) -> str:
-    if value == "q8":
-        return "q8_0"
-    return value
-
-
 def parse_n_gpu_layers(value: str) -> str:
     v = value.strip().lower()
     if v == "auto":
@@ -138,6 +132,13 @@ def parse_n_gpu_layers(value: str) -> str:
     if v.isdigit():
         return str(int(v))
     raise argparse.ArgumentTypeError("n-gpu-layers must be an integer or 'auto'")
+
+
+def parse_flash_attn(value: str) -> str:
+    v = value.strip().lower()
+    if v in {"on", "off", "auto"}:
+        return v
+    raise argparse.ArgumentTypeError("flash-attn must be one of: on, off, auto")
 
 
 def find_models_block(lines: List[str]) -> tuple[Optional[int], int]:
@@ -225,15 +226,13 @@ def build_cmd(
     model_path: Path,
     thinking: Optional[bool],
     ctx_size: int,
-    flash_attn: bool,
+    flash_attn: str,
     cache_type_k: str,
     cache_type_v: str,
     n_gpu_layers: str,
     mmap: bool,
     batch_size: int,
 ) -> str:
-    cache_type_k = normalize_cache_type(cache_type_k)
-    cache_type_v = normalize_cache_type(cache_type_v)
     cmd_parts = [
         shlex.quote(llama_server),
         "--offline",
@@ -249,9 +248,9 @@ def build_cmd(
         shlex.quote(cache_type_v),
         "--n-gpu-layers",
         str(n_gpu_layers),
+        "--flash-attn",
+        shlex.quote(flash_attn),
     ]
-    if flash_attn:
-        cmd_parts.append("--flash-attn")
     cmd_parts.append("--mmap" if mmap else "--no-mmap")
     if thinking is not None:
         val = "true" if thinking else "false"
@@ -292,24 +291,25 @@ def main() -> int:
     )
     parser.add_argument(
         "--flash-attn",
-        action="store_true",
-        help="Enable flash attention (default: disabled).",
+        type=parse_flash_attn,
+        default="on",
+        help="Flash attention mode: on, off, auto (default: on).",
     )
     parser.add_argument(
         "--cache-type-k",
-        default="q8",
-        help="KV cache K quantization type (default: q8).",
+        default="q8_0",
+        help="KV cache K quantization type (default: q8_0).",
     )
     parser.add_argument(
         "--cache-type-v",
-        default="q8",
-        help="KV cache V quantization type (default: q8).",
+        default="q8_0",
+        help="KV cache V quantization type (default: q8_0).",
     )
     parser.add_argument(
         "--n-gpu-layers",
         type=parse_n_gpu_layers,
-        default="auto",
-        help="Number of layers to offload to GPU (default: auto).",
+        default="40",
+        help="Number of layers to offload to GPU (default: 40).",
     )
     parser.add_argument(
         "--mmap",
@@ -359,7 +359,7 @@ def main() -> int:
     template_path = (
         Path(args.template).expanduser()
         if args.template
-        else Path(__file__).with_name("llama-swap.yml")
+        else Path(__file__).with_name("llama-swap.yaml.example")
     )
     header_lines = read_header(template_path)
     if template_path.is_file():
