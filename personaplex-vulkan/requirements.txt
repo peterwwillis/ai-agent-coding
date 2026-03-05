@@ -1,0 +1,3 @@
+# Requirements for the personaplex-vulkan project
+
+sounddevice
