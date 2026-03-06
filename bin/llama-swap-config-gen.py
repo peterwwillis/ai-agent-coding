@@ -396,25 +396,26 @@ def auto_batch_settings(profile: HardwareProfile, model_size_gb: float, log) -> 
 
 
 def resolve_batch_settings(
-    batch_arg: str,
-    ubatch_arg: str,
     allow_equal: bool,
     profile: Optional[HardwareProfile],
     model_path: Path,
     log,
 ) -> tuple[int, int]:
+
     model_size_gb = model_path.stat().st_size / (1024**3)
     auto_batch = None
     auto_ubatch = None
-    if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+
+    if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
         if profile is None:
             raise ValueError("auto batch sizing requires a detected hardware profile")
         auto_batch, auto_ubatch = auto_batch_settings(profile, model_size_gb, log)
-    batch = auto_batch if batch_arg == BATCH_AUTO else int(batch_arg)
-    ubatch = auto_ubatch if ubatch_arg == BATCH_AUTO else int(ubatch_arg)
-    if batch_arg != BATCH_AUTO:
+
+    batch = auto_batch if self.batch_arg == BATCH_AUTO else int(self.batch_arg)
+    ubatch = auto_ubatch if self.ubatch_arg == BATCH_AUTO else int(self.ubatch_arg)
+    if self.batch_arg != BATCH_AUTO:
         log(f"Using explicit batch size: -b {batch}")
-    if ubatch_arg != BATCH_AUTO:
+    if self.ubatch_arg != BATCH_AUTO:
         log(f"Using explicit ubatch size: -ub {ubatch}")
     if allow_equal:
         log("Allowing batch == ubatch for embeddings/reranking mode.")
@@ -423,7 +424,8 @@ def resolve_batch_settings(
     else:
         if batch <= ubatch:
             raise ValueError("batch size must be greater than ubatch size")
-    if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+
+    if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
         log(f"Auto batch settings for '{model_path.name}': -b {batch} -ub {ubatch} (profile: {profile.name}, model {model_size_gb:.1f} GB)")
     return batch, ubatch
 
@@ -551,12 +553,7 @@ def build_cmd(
     return " ".join(cmd_parts)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Generate a llama-swap config from llama.cpp cached GGUF models.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=HELP_EPILOG,
-    )
+def set_parser_args(parser):
     parser.add_argument(
         "--llama-server",
         default=os.environ.get("LLAMA_SERVER", "llama-server"),
@@ -656,224 +653,257 @@ def main() -> int:
         help="Remove model entries not present in the llama.cpp cache.",
     )
 
-    args = parser.parse_args()
-    log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else (lambda _msg: None)
 
-    if (args.batch_size == BATCH_AUTO or args.ubatch_size == BATCH_AUTO) and not args.batch_size_autodetect:
-        print(
-            "ERROR: batch size 'auto' requires --batch-size-autodetect.",
-            file=sys.stderr,
+class MyApp:
+
+    def __init__(self):
+        parser = argparse.ArgumentParser(
+            description="Generate a llama-swap config from llama.cpp cached GGUF models.",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog=HELP_EPILOG,
         )
-        return 2
-    if (args.batch_size is None) != (args.ubatch_size is None):
-        print("ERROR: --batch-size and --ubatch-size must be provided together.", file=sys.stderr)
-        return 2
 
-    log_dir = default_llama_cache_dir()
-    try:
-        log_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        print(f"ERROR: unable to create log directory: {log_dir} ({exc})", file=sys.stderr)
-        return 2
+        set_parser_args(parser)
+        self.args = parser.parse_args()
 
-    hardware_profile = None
-    batch_arg = args.batch_size
-    ubatch_arg = args.ubatch_size
-    if args.batch_size_autodetect:
-        if batch_arg is None and ubatch_arg is None:
-            batch_arg = BATCH_AUTO
-            ubatch_arg = BATCH_AUTO
-            log("Batch size autodetect enabled; using auto batch/ubatch.")
-        else:
-            log("Batch size autodetect enabled, but explicit batch/ubatch provided; skipping auto.")
-    else:
-        if batch_arg is None and ubatch_arg is None:
-            log("Batch/ubatch not provided; leaving llama-server defaults.")
-        else:
-            log("Using explicit batch/ubatch values; autodetect disabled.")
+        self.log_dir = default_llama_cache_dir()
+        try:
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            print(f"ERROR: unable to create log directory: {self.log_dir} ({exc})", file=sys.stderr)
+            return 2
 
-    n_gpu_layers_arg = args.n_gpu_layers
-    if args.gpu_layer_autodetect:
-        if n_gpu_layers_arg is None:
-            log("GPU layer autodetect enabled; using GGUF block_count.")
-        else:
-            log("GPU layer autodetect enabled, but explicit n-gpu-layers provided; skipping auto.")
-    else:
-        if n_gpu_layers_arg is None:
-            log("n-gpu-layers not provided; leaving llama-server defaults.")
-        else:
-            log("Using explicit n-gpu-layers; autodetect disabled.")
+        self.log = (lambda msg: print(msg, file=sys.stderr)) if self.args.verbose else (lambda _msg: None)
 
-    models_dir = Path(args.models_dir).expanduser()
-    if not models_dir.is_dir():
-        print(f"ERROR: models directory not found: {models_dir}", file=sys.stderr)
-        return 2
+        self.hardware_profile = None
 
-    log(f"Scanning for .gguf models under: {models_dir}")
-    ggufs = sorted(p for p in models_dir.rglob("*.gguf") if p.is_file())
-    if not ggufs:
-        print(f"ERROR: no .gguf files found under: {models_dir}", file=sys.stderr)
-        return 3
-    log(f"Found {len(ggufs)} .gguf model(s).")
-
-    template_path = Path(args.template).expanduser() if args.template else Path(__file__).with_name("llama-swap.yaml.example")
-    header_lines = read_header(template_path)
-    if template_path.is_file():
-        log(f"Using template header from: {template_path}")
-    else:
-        log("Template header not found; using minimal header.")
-
-    used_names = {}
-    entry_blocks: List[tuple[str, List[str]]] = []
-    for model_path in ggufs:
-        base_name = model_path.stem
-        count = used_names.get(base_name, 0) + 1
-        used_names[base_name] = count
-        name = base_name if count == 1 else f"{base_name}-{count}"
-        log_file = log_dir / f"llama-swap-{sanitize_log_stem(name)}.log"
-        log(f"Log file for '{name}': {log_file}")
-
-        n_gpu_layers = n_gpu_layers_arg
-        if n_gpu_layers is None and args.gpu_layer_autodetect:
-            block_count = read_gguf_block_count(model_path)
-            if block_count:
-                n_gpu_layers = str(block_count + 1)
-                log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers} (block_count + 1)")
+        self.batch_arg = self.args.batch_size
+        self.ubatch_arg = self.args.ubatch_size
+        if self.args.batch_size_autodetect:
+            if self.batch_arg is None and self.ubatch_arg is None:
+                self.batch_arg = BATCH_AUTO
+                self.ubatch_arg = BATCH_AUTO
+                self.log("Batch size autodetect enabled; using auto batch/ubatch.")
             else:
-                n_gpu_layers = DEFAULT_N_GPU_LAYERS
-                log(f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}.")
-        if n_gpu_layers is not None:
-            log(f"Using n-gpu-layers for '{name}': {n_gpu_layers}")
-
-        batch_size = None
-        ubatch_size = None
-        if batch_arg is not None and ubatch_arg is not None:
-            if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
-                if hardware_profile is None:
-                    hardware_profile = detect_hardware_profile(log)
-                    vram_info = f", {hardware_profile.vram_gb:.1f} GB VRAM" if hardware_profile.vram_gb else ""
-                    log(f"Auto batch profile: {hardware_profile.name}{vram_info}")
-            try:
-                batch_size, ubatch_size = resolve_batch_settings(
-                    batch_arg,
-                    ubatch_arg,
-                    args.allow_equal_batch,
-                    hardware_profile,
-                    model_path,
-                    log,
-                )
-            except ValueError as exc:
-                print(f"ERROR: {exc} for model '{name}'", file=sys.stderr)
-                return 2
-
-        thinking_optional = template_supports_thinking(model_path)
-        log(f"Adding model '{name}' (thinking optional: {'yes' if thinking_optional else 'no'}).")
-        if thinking_optional:
-            entry_blocks.append(
-                (
-                    name,
-                    [
-                        f"  {yaml_key(name)}:",
-                        f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
-                    ],
-                )
-            )
-            entry_blocks.append(
-                (
-                    f"{name}-thinking",
-                    [
-                        f"  {yaml_key(name)}-thinking:",
-                        f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
-                    ],
-                )
-            )
+                self.log("Batch size autodetect enabled, but explicit batch/ubatch provided; skipping auto.")
         else:
-            entry_blocks.append(
-                (
-                    name,
-                    [
-                        f"  {yaml_key(name)}:",
-                        f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
-                    ],
+            if self.batch_arg is None and self.ubatch_arg is None:
+                self.log("Batch/ubatch not provided; leaving llama-server defaults.")
+            else:
+                self.log("Using explicit batch/ubatch values; autodetect disabled.")
+
+
+
+    def make_entry_blocks(self, ggufs) -> List[tuple[str, List[str]]]:
+        args = self.args
+        log = self.log
+        used_names = {}
+        entry_blocks: List[tuple[str, List[str]]] = []
+
+        for model_path in ggufs:
+            base_name = model_path.stem
+            count = used_names.get(base_name, 0) + 1
+            used_names[base_name] = count
+            name = base_name if count == 1 else f"{base_name}-{count}"
+            log_file = self.log_dir / f"llama-swap-{sanitize_log_stem(name)}.log"
+            log(f"Log file for '{name}': {log_file}")
+
+            n_gpu_layers = args.n_gpu_layers
+            if n_gpu_layers is None and args.gpu_layer_autodetect:
+                block_count = read_gguf_block_count(model_path)
+                if block_count:
+                    n_gpu_layers = str(block_count + 1)
+                    log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers} (block_count + 1)")
+                else:
+                    n_gpu_layers = DEFAULT_N_GPU_LAYERS
+                    log(f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}.")
+            if n_gpu_layers is not None:
+                log(f"Using n-gpu-layers for '{name}': {n_gpu_layers}")
+
+            batch_size = None
+            ubatch_size = None
+            if self.batch_arg is not None and self.ubatch_arg is not None:
+                if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
+                    if hardware_profile is None:
+                        hardware_profile = detect_hardware_profile(log)
+                        vram_info = f", {hardware_profile.vram_gb:.1f} GB VRAM" if hardware_profile.vram_gb else ""
+                        log(f"Auto batch profile: {hardware_profile.name}{vram_info}")
+                try:
+                    batch_size, ubatch_size = resolve_batch_settings(
+                        args.allow_equal_batch,
+                        hardware_profile,
+                        model_path,
+                        log,
+                    )
+                except ValueError as exc:
+                    print(f"ERROR: {exc} for model '{name}'", file=sys.stderr)
+                    return 2
+
+            thinking_optional = template_supports_thinking(model_path)
+            log(f"Adding model '{name}' (thinking optional: {'yes' if thinking_optional else 'no'}).")
+            if thinking_optional:
+                entry_blocks.append(
+                    (
+                        name,
+                        [
+                            f"  {yaml_key(name)}:",
+                            f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
+                        ],
+                    )
                 )
+                entry_blocks.append(
+                    (
+                        f"{name}-thinking",
+                        [
+                            f"  {yaml_key(name)}-thinking:",
+                            f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
+                        ],
+                    )
+                )
+            else:
+                entry_blocks.append(
+                    (
+                        name,
+                        [
+                            f"  {yaml_key(name)}:",
+                            f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
+                        ],
+                    )
+                )
+        return entry_blocks
+
+
+
+    def main(self) -> int:
+        args = self.args
+        log = self.log
+
+        if (args.batch_size == BATCH_AUTO or args.ubatch_size == BATCH_AUTO) and not args.batch_size_autodetect:
+            print(
+                "ERROR: batch size 'auto' requires --batch-size-autodetect.",
+                file=sys.stderr,
             )
+            return 2
+        if (args.batch_size is None) != (args.ubatch_size is None):
+            print("ERROR: --batch-size and --ubatch-size must be provided together.", file=sys.stderr)
+            return 2
 
-    entries: List[str] = []
-    for _name, block in entry_blocks:
-        entries.extend(block)
-        entries.append("")
 
-    output_lines = header_lines + [""] + entries
-    text = "\n".join(output_lines).rstrip() + "\n"
+        if args.gpu_layer_autodetect:
+            if args.n_gpu_layers is None:
+                log("GPU layer autodetect enabled; using GGUF block_count.")
+            else:
+                log("GPU layer autodetect enabled, but explicit n-gpu-layers provided; skipping auto.")
+        else:
+            if args.n_gpu_layers is None:
+                log("n-gpu-layers not provided; leaving llama-server defaults.")
+            else:
+                log("Using explicit n-gpu-layers; autodetect disabled.")
 
-    if args.output == "-":
-        sys.stdout.write(text)
-        log("Wrote config to stdout.")
-        return 0
+        models_dir = Path(args.models_dir).expanduser()
+        if not models_dir.is_dir():
+            print(f"ERROR: models directory not found: {models_dir}", file=sys.stderr)
+            return 2
 
-    out_path = Path(args.output).expanduser()
-    if out_path.exists():
-        existing_lines = out_path.read_text(encoding="utf-8").splitlines()
-        start, end = find_models_block(existing_lines)
-        if start is None:
-            if existing_lines and existing_lines[-1].strip():
-                existing_lines.append("")
-            existing_lines.append("models:")
-            start = len(existing_lines) - 1
-            end = len(existing_lines)
+        log(f"Scanning for .gguf models under: {models_dir}")
+        ggufs = sorted(p for p in models_dir.rglob("*.gguf") if p.is_file())
+        if not ggufs:
+            print(f"ERROR: no .gguf files found under: {models_dir}", file=sys.stderr)
+            return 3
+        log(f"Found {len(ggufs)} .gguf model(s).")
 
-        if start is not None and args.prune_missing:
-            entries_meta = parse_models_entries(existing_lines, start, end)
-            desired = {name for name, _block in entry_blocks}
-            keep = [True] * len(existing_lines)
-            removed = 0
-            for key, entry_start, entry_end in entries_meta:
-                if key in desired:
-                    continue
-                for idx in range(entry_start, entry_end):
-                    keep[idx] = False
-                removed += 1
-            if removed:
-                existing_lines = [line for idx, line in enumerate(existing_lines) if keep[idx]]
-                start, end = find_models_block(existing_lines)
-                log(f"Pruned {removed} missing model entr{'y' if removed == 1 else 'ies'}.")
+        template_path = Path(args.template).expanduser() if args.template else Path(__file__).with_name("llama-swap.yaml.example")
+        header_lines = read_header(template_path)
+        if template_path.is_file():
+            log(f"Using template header from: {template_path}")
+        else:
+            log("Template header not found; using minimal header.")
 
-        start, end = find_models_block(existing_lines)
-        if start is None:
-            if existing_lines and existing_lines[-1].strip():
-                existing_lines.append("")
-            existing_lines.append("models:")
-            start = len(existing_lines) - 1
-            end = len(existing_lines)
+        entry_blocks = self.make_entry_blocks(ggufs)
+        entries: List[str] = []
+        for _name, block in entry_blocks:
+            entries.extend(block)
+            entries.append("")
 
-        existing = existing_model_keys(existing_lines, start, end)
-        lines_to_add: List[str] = []
-        added = 0
-        for entry_name, block in entry_blocks:
-            if entry_name in existing:
-                continue
-            if lines_to_add:
-                lines_to_add.append("")
-            lines_to_add.extend(block)
-            added += 1
+        output_lines = header_lines + [""] + entries
+        text = "\n".join(output_lines).rstrip() + "\n"
 
-        if not lines_to_add:
-            log(f"No new entries to add; leaving config unchanged: {out_path}")
+        if args.output == "-":
+            sys.stdout.write(text)
+            log("Wrote config to stdout.")
             return 0
 
-        if end > start + 1 and existing_lines[end - 1].strip():
-            lines_to_add = [""] + lines_to_add
-        existing_lines[end:end] = lines_to_add
-        new_text = "\n".join(existing_lines).rstrip() + "\n"
-        out_path.write_text(new_text, encoding="utf-8")
-        log(f"Updated config at: {out_path} (added {added} entr{'y' if added == 1 else 'ies'}).")
-    else:
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(text, encoding="utf-8")
-        log(f"Wrote new config to: {out_path}")
+        # Note: at this point, 'text' only contains the new entries.
+        # The following will intersperse entries from an old config
+        # with the 'text'.
 
-    return 0
+        out_path = Path(args.output).expanduser()
+        if out_path.exists():
+            existing_lines = out_path.read_text(encoding="utf-8").splitlines()
+            start, end = find_models_block(existing_lines)
+            if start is None:
+                if existing_lines and existing_lines[-1].strip():
+                    existing_lines.append("")
+                existing_lines.append("models:")
+                start = len(existing_lines) - 1
+                end = len(existing_lines)
+
+            if start is not None and args.prune_missing:
+                entries_meta = parse_models_entries(existing_lines, start, end)
+                print("entries_meta %s" % entries_meta)
+                desired = {name for name, _block in entry_blocks}
+                keep = [True] * len(existing_lines)
+                removed = 0
+                for key, entry_start, entry_end in entries_meta:
+                    if key in desired:
+                        continue
+                    for idx in range(entry_start, entry_end):
+                        keep[idx] = False
+                    removed += 1
+                if removed:
+                    existing_lines = [line for idx, line in enumerate(existing_lines) if keep[idx]]
+                    print("start '%s' end '%s'" % (start, end))
+                    start, end = find_models_block(existing_lines)
+                    print("start '%s' end '%s'" % (start, end))
+                    log(f"Pruned {removed} missing model entr{'y' if removed == 1 else 'ies'}.")
+
+            start, end = find_models_block(existing_lines)
+            if start is None:
+                if existing_lines and existing_lines[-1].strip():
+                    existing_lines.append("")
+                existing_lines.append("models:")
+                start = len(existing_lines) - 1
+                end = len(existing_lines)
+
+            existing = existing_model_keys(existing_lines, start, end)
+            lines_to_add: List[str] = []
+            added = 0
+            for entry_name, block in entry_blocks:
+                if entry_name in existing:
+                    continue
+                if lines_to_add:
+                    lines_to_add.append("")
+                lines_to_add.extend(block)
+                added += 1
+
+            if not lines_to_add:
+                log(f"No new entries to add; leaving config unchanged: {out_path}")
+                return 0
+
+            if end > start + 1 and existing_lines[end - 1].strip():
+                lines_to_add = [""] + lines_to_add
+            existing_lines[end:end] = lines_to_add
+            new_text = "\n".join(existing_lines).rstrip() + "\n"
+            out_path.write_text(new_text, encoding="utf-8")
+            log(f"Updated config at: {out_path} (added {added} entr{'y' if added == 1 else 'ies'}).")
+        else:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(text, encoding="utf-8")
+            log(f"Wrote new config to: {out_path}")
+
+        return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    app = MyApp()
+    raise SystemExit(app.main())
