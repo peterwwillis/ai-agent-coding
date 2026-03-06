@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""Generate a llama-swap config.yaml from GGUF models in the llama.cpp cache.
+
+Uses the ruamel.yaml library for YAML loading and saving so that
+comments and whitespace are preserved in existing config files.
+"""
 from __future__ import annotations
 
 import argparse
@@ -9,7 +14,10 @@ import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+from ruamel.yaml import YAML
+from ruamel.yaml.scalarstring import LiteralScalarString
 
 DEFAULT_N_GPU_LAYERS = "40"
 LOG_NAME_MAX = 64
@@ -228,21 +236,6 @@ def template_supports_thinking(path: Path) -> bool:
     return "enable_thinking" in template
 
 
-def yaml_key(name: str) -> str:
-    safe = all(ch.isalnum() or ch in "._-" for ch in name)
-    return name if safe else "'" + name.replace("'", "''") + "'"
-
-
-def normalize_yaml_key_text(key: str) -> str:
-    key = key.strip()
-    if len(key) >= 2 and key[0] == key[-1] and key[0] in ("'", '"'):
-        inner = key[1:-1]
-        if key[0] == "'":
-            return inner.replace("''", "'")
-        return inner.replace('\\"', '"')
-    return key
-
-
 def sanitize_log_stem(name: str) -> str:
     cleaned = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)
     cleaned = cleaned.strip("._-")
@@ -395,116 +388,11 @@ def auto_batch_settings(profile: HardwareProfile, model_size_gb: float, log) -> 
     return batch, ubatch
 
 
-def resolve_batch_settings(
-    allow_equal: bool,
-    profile: Optional[HardwareProfile],
-    model_path: Path,
-    log,
-) -> tuple[int, int]:
-
-    model_size_gb = model_path.stat().st_size / (1024**3)
-    auto_batch = None
-    auto_ubatch = None
-
-    if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
-        if profile is None:
-            raise ValueError("auto batch sizing requires a detected hardware profile")
-        auto_batch, auto_ubatch = auto_batch_settings(profile, model_size_gb, log)
-
-    batch = auto_batch if self.batch_arg == BATCH_AUTO else int(self.batch_arg)
-    ubatch = auto_ubatch if self.ubatch_arg == BATCH_AUTO else int(self.ubatch_arg)
-    if self.batch_arg != BATCH_AUTO:
-        log(f"Using explicit batch size: -b {batch}")
-    if self.ubatch_arg != BATCH_AUTO:
-        log(f"Using explicit ubatch size: -ub {ubatch}")
-    if allow_equal:
-        log("Allowing batch == ubatch for embeddings/reranking mode.")
-        if batch < ubatch:
-            raise ValueError("batch size must be greater than or equal to ubatch size")
-    else:
-        if batch <= ubatch:
-            raise ValueError("batch size must be greater than ubatch size")
-
-    if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
-        log(f"Auto batch settings for '{model_path.name}': -b {batch} -ub {ubatch} (profile: {profile.name}, model {model_size_gb:.1f} GB)")
-    return batch, ubatch
-
-
 def parse_flash_attn(value: str) -> str:
     v = value.strip().lower()
     if v in {"on", "off", "auto"}:
         return v
     raise argparse.ArgumentTypeError("flash-attn must be one of: on, off, auto")
-
-
-def find_models_block(lines: List[str]) -> tuple[Optional[int], int]:
-    start = None
-    for i, line in enumerate(lines):
-        if line.strip().startswith("models:"):
-            start = i
-            break
-    if start is None:
-        return None, len(lines)
-    end = len(lines)
-    for j in range(start + 1, len(lines)):
-        stripped = lines[j].lstrip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if not lines[j].startswith(" "):
-            end = j
-            break
-    return start, end
-
-
-def existing_model_keys(lines: List[str], start: int, end: int) -> set[str]:
-    keys: set[str] = set()
-    for line in lines[start + 1 : end]:
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if line.startswith("  ") and not line.startswith("    "):
-            stripped = line.strip()
-            if stripped.endswith(":") and not stripped.startswith("-"):
-                key = stripped[:-1].strip()
-                keys.add(normalize_yaml_key_text(key))
-    return keys
-
-
-def parse_models_entries(lines: List[str], start: int, end: int) -> List[tuple[str, int, int]]:
-    entries: List[tuple[str, int, int]] = []
-    i = start + 1
-    while i < end:
-        line = lines[i]
-        if line.startswith("  ") and not line.startswith("    ") and line.strip() and not line.lstrip().startswith("#"):
-            stripped = line.strip()
-            if stripped.endswith(":") and not stripped.startswith("-"):
-                key = normalize_yaml_key_text(stripped[:-1].strip())
-                entry_start = i
-                i += 1
-                while i < end:
-                    next_line = lines[i]
-                    if next_line.startswith("  ") and not next_line.startswith("    ") and next_line.strip() and not next_line.lstrip().startswith("#"):
-                        if next_line.strip().endswith(":") and not next_line.strip().startswith("-"):
-                            break
-                    i += 1
-                entry_end = i
-                entries.append((key, entry_start, entry_end))
-                continue
-        i += 1
-    return entries
-
-
-def read_header(template_path: Optional[Path]) -> List[str]:
-    if not template_path or not template_path.is_file():
-        return ["models:"]
-
-    lines = template_path.read_text(encoding="utf-8").splitlines()
-    header: List[str] = []
-    for line in lines:
-        header.append(line)
-        if line.strip().startswith("models:"):
-            return header
-    header.append("models:")
-    return header
 
 
 def build_cmd(
@@ -520,37 +408,55 @@ def build_cmd(
     batch_size: Optional[int],
     ubatch_size: Optional[int],
     log_file: Path,
-) -> str:
-    cmd_parts = [
+) -> LiteralScalarString:
+    # Build logical groups of flag + value(s), one per line.
+    lines = [
         shlex.quote(llama_server),
-        "--offline",
-        "--log-file",
-        shlex.quote(str(log_file)),
-        "--log-colors",
-        "off",
-        "--log-prefix",
-        "--log-timestamps",
-        "-m",
-        shlex.quote(str(model_path)),
-        "--ctx-size",
-        str(ctx_size),
-        "--cache-type-k",
-        shlex.quote(cache_type_k),
-        "--cache-type-v",
-        shlex.quote(cache_type_v),
-        "--flash-attn",
-        shlex.quote(flash_attn),
+        "  --offline",
+        f"  --log-file {shlex.quote(str(log_file))}",
+        "  --log-colors off",
+        "  --log-prefix",
+        "  --log-timestamps",
+        f"  -m {shlex.quote(str(model_path))}",
+        f"  --ctx-size {ctx_size}",
+        f"  --cache-type-k {shlex.quote(cache_type_k)}",
+        f"  --cache-type-v {shlex.quote(cache_type_v)}",
+        f"  --flash-attn {shlex.quote(flash_attn)}",
     ]
     if batch_size is not None and ubatch_size is not None:
-        cmd_parts.extend(["--batch-size", str(batch_size), "--ubatch-size", str(ubatch_size)])
+        lines.append(f"  --batch-size {batch_size} --ubatch-size {ubatch_size}")
     if n_gpu_layers is not None:
-        cmd_parts.extend(["--n-gpu-layers", str(n_gpu_layers)])
-    cmd_parts.append("--mmap" if mmap else "--no-mmap")
+        lines.append(f"  --n-gpu-layers {n_gpu_layers}")
+    lines.append("  --mmap" if mmap else "  --no-mmap")
     if thinking is not None:
         val = "true" if thinking else "false"
-        cmd_parts.extend(["--chat-template-kwargs", f"'{{\"enable_thinking\":{val}}}'"])
-    cmd_parts.extend(["--port", "${PORT}"])
-    return " ".join(cmd_parts)
+        lines.append(f"  --chat-template-kwargs '{{\"enable_thinking\":{val}}}'")
+    lines.append("  --port ${PORT}")
+    # Join with backslash-newline so the shell treats it as one command.
+    cmd = " \\\n".join(lines) + "\n"
+    return LiteralScalarString(cmd)
+
+
+def _make_yaml() -> YAML:
+    y = YAML()
+    y.preserve_quotes = True
+    y.width = 10000
+    return y
+
+
+def load_yaml_file(path: Path):
+    if not path.is_file():
+        return {}
+    y = _make_yaml()
+    data = y.load(path)
+    return data if isinstance(data, dict) else {}
+
+
+def save_yaml_file(path: Path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    y = _make_yaml()
+    with path.open("w", encoding="utf-8") as f:
+        y.dump(data, f)
 
 
 def set_parser_args(parser):
@@ -671,7 +577,7 @@ class MyApp:
             self.log_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             print(f"ERROR: unable to create log directory: {self.log_dir} ({exc})", file=sys.stderr)
-            return 2
+            return
 
         self.log = (lambda msg: print(msg, file=sys.stderr)) if self.args.verbose else (lambda _msg: None)
 
@@ -692,13 +598,45 @@ class MyApp:
             else:
                 self.log("Using explicit batch/ubatch values; autodetect disabled.")
 
+    def resolve_batch_settings(
+        self,
+        allow_equal: bool,
+        profile: Optional[HardwareProfile],
+        model_path: Path,
+        log,
+    ) -> tuple[int, int]:
+        model_size_gb = model_path.stat().st_size / (1024**3)
+        auto_batch = None
+        auto_ubatch = None
 
+        if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
+            if profile is None:
+                raise ValueError("auto batch sizing requires a detected hardware profile")
+            auto_batch, auto_ubatch = auto_batch_settings(profile, model_size_gb, log)
 
-    def make_entry_blocks(self, ggufs) -> List[tuple[str, List[str]]]:
+        batch = auto_batch if self.batch_arg == BATCH_AUTO else int(self.batch_arg)
+        ubatch = auto_ubatch if self.ubatch_arg == BATCH_AUTO else int(self.ubatch_arg)
+        if self.batch_arg != BATCH_AUTO:
+            log(f"Using explicit batch size: -b {batch}")
+        if self.ubatch_arg != BATCH_AUTO:
+            log(f"Using explicit ubatch size: -ub {ubatch}")
+        if allow_equal:
+            log("Allowing batch == ubatch for embeddings/reranking mode.")
+            if batch < ubatch:
+                raise ValueError("batch size must be greater than or equal to ubatch size")
+        else:
+            if batch <= ubatch:
+                raise ValueError("batch size must be greater than ubatch size")
+
+        if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
+            log(f"Auto batch settings for '{model_path.name}': -b {batch} -ub {ubatch} (profile: {profile.name}, model {model_size_gb:.1f} GB)")
+        return batch, ubatch
+
+    def make_model_entries(self, ggufs: List[Path]) -> Dict[str, dict]:
         args = self.args
         log = self.log
-        used_names = {}
-        entry_blocks: List[tuple[str, List[str]]] = []
+        used_names: Dict[str, int] = {}
+        entries: Dict[str, dict] = {}
 
         for model_path in ggufs:
             base_name = model_path.stem
@@ -724,55 +662,45 @@ class MyApp:
             ubatch_size = None
             if self.batch_arg is not None and self.ubatch_arg is not None:
                 if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
-                    if hardware_profile is None:
-                        hardware_profile = detect_hardware_profile(log)
-                        vram_info = f", {hardware_profile.vram_gb:.1f} GB VRAM" if hardware_profile.vram_gb else ""
-                        log(f"Auto batch profile: {hardware_profile.name}{vram_info}")
+                    if self.hardware_profile is None:
+                        self.hardware_profile = detect_hardware_profile(log)
+                        vram_info = f", {self.hardware_profile.vram_gb:.1f} GB VRAM" if self.hardware_profile.vram_gb else ""
+                        log(f"Auto batch profile: {self.hardware_profile.name}{vram_info}")
                 try:
-                    batch_size, ubatch_size = resolve_batch_settings(
+                    batch_size, ubatch_size = self.resolve_batch_settings(
                         args.allow_equal_batch,
-                        hardware_profile,
+                        self.hardware_profile,
                         model_path,
                         log,
                     )
                 except ValueError as exc:
                     print(f"ERROR: {exc} for model '{name}'", file=sys.stderr)
-                    return 2
+                    return {}
 
             thinking_optional = template_supports_thinking(model_path)
             log(f"Adding model '{name}' (thinking optional: {'yes' if thinking_optional else 'no'}).")
+
+            cmd_kwargs = dict(
+                llama_server=args.llama_server,
+                model_path=model_path,
+                ctx_size=args.ctx_size,
+                flash_attn=args.flash_attn,
+                cache_type_k=args.cache_type_k,
+                cache_type_v=args.cache_type_v,
+                n_gpu_layers=n_gpu_layers,
+                mmap=args.mmap,
+                batch_size=batch_size,
+                ubatch_size=ubatch_size,
+                log_file=log_file,
+            )
+
             if thinking_optional:
-                entry_blocks.append(
-                    (
-                        name,
-                        [
-                            f"  {yaml_key(name)}:",
-                            f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
-                        ],
-                    )
-                )
-                entry_blocks.append(
-                    (
-                        f"{name}-thinking",
-                        [
-                            f"  {yaml_key(name)}-thinking:",
-                            f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
-                        ],
-                    )
-                )
+                entries[name] = {"cmd": build_cmd(thinking=False, **cmd_kwargs)}
+                entries[f"{name}-thinking"] = {"cmd": build_cmd(thinking=True, **cmd_kwargs)}
             else:
-                entry_blocks.append(
-                    (
-                        name,
-                        [
-                            f"  {yaml_key(name)}:",
-                            f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
-                        ],
-                    )
-                )
-        return entry_blocks
+                entries[name] = {"cmd": build_cmd(thinking=None, **cmd_kwargs)}
 
-
+        return entries
 
     def main(self) -> int:
         args = self.args
@@ -787,7 +715,6 @@ class MyApp:
         if (args.batch_size is None) != (args.ubatch_size is None):
             print("ERROR: --batch-size and --ubatch-size must be provided together.", file=sys.stderr)
             return 2
-
 
         if args.gpu_layer_autodetect:
             if args.n_gpu_layers is None:
@@ -813,94 +740,55 @@ class MyApp:
         log(f"Found {len(ggufs)} .gguf model(s).")
 
         template_path = Path(args.template).expanduser() if args.template else Path(__file__).with_name("llama-swap.yaml.example")
-        header_lines = read_header(template_path)
+        base_config = load_yaml_file(template_path)
         if template_path.is_file():
-            log(f"Using template header from: {template_path}")
+            log(f"Using template from: {template_path}")
         else:
-            log("Template header not found; using minimal header.")
+            log("Template not found; using minimal config.")
+        # Don't carry over template's models section
+        base_config.pop("models", None)
 
-        entry_blocks = self.make_entry_blocks(ggufs)
-        entries: List[str] = []
-        for _name, block in entry_blocks:
-            entries.extend(block)
-            entries.append("")
-
-        output_lines = header_lines + [""] + entries
-        text = "\n".join(output_lines).rstrip() + "\n"
+        new_entries = self.make_model_entries(ggufs)
+        if not new_entries and ggufs:
+            return 2
 
         if args.output == "-":
-            sys.stdout.write(text)
+            config = dict(base_config)
+            config["models"] = new_entries
+            y = _make_yaml()
+            y.dump(config, sys.stdout)
             log("Wrote config to stdout.")
             return 0
 
-        # Note: at this point, 'text' only contains the new entries.
-        # The following will intersperse entries from an old config
-        # with the 'text'.
-
         out_path = Path(args.output).expanduser()
-        if out_path.exists():
-            existing_lines = out_path.read_text(encoding="utf-8").splitlines()
-            start, end = find_models_block(existing_lines)
-            if start is None:
-                if existing_lines and existing_lines[-1].strip():
-                    existing_lines.append("")
-                existing_lines.append("models:")
-                start = len(existing_lines) - 1
-                end = len(existing_lines)
+        if not out_path.exists():
+            config = dict(base_config)
+            config["models"] = new_entries
+            save_yaml_file(out_path, config)
+            log(f"Wrote new config to: {out_path}")
+            return 0
 
-            if start is not None and args.prune_missing:
-                entries_meta = parse_models_entries(existing_lines, start, end)
-                print("entries_meta %s" % entries_meta)
-                desired = {name for name, _block in entry_blocks}
-                keep = [True] * len(existing_lines)
-                removed = 0
-                for key, entry_start, entry_end in entries_meta:
-                    if key in desired:
-                        continue
-                    for idx in range(entry_start, entry_end):
-                        keep[idx] = False
-                    removed += 1
-                if removed:
-                    existing_lines = [line for idx, line in enumerate(existing_lines) if keep[idx]]
-                    print("start '%s' end '%s'" % (start, end))
-                    start, end = find_models_block(existing_lines)
-                    print("start '%s' end '%s'" % (start, end))
-                    log(f"Pruned {removed} missing model entr{'y' if removed == 1 else 'ies'}.")
+        existing_config = load_yaml_file(out_path)
+        existing_models = existing_config.get("models") or {}
 
-            start, end = find_models_block(existing_lines)
-            if start is None:
-                if existing_lines and existing_lines[-1].strip():
-                    existing_lines.append("")
-                existing_lines.append("models:")
-                start = len(existing_lines) - 1
-                end = len(existing_lines)
+        pruned = 0
+        if args.prune_missing:
+            desired_keys = set(new_entries.keys())
+            to_remove = [k for k in existing_models if k not in desired_keys]
+            for k in to_remove:
+                log(f"Pruned model {k}")
+                del existing_models[k]
+                pruned += 1
 
-            existing = existing_model_keys(existing_lines, start, end)
-            lines_to_add: List[str] = []
-            added = 0
-            for entry_name, block in entry_blocks:
-                if entry_name in existing:
-                    continue
-                if lines_to_add:
-                    lines_to_add.append("")
-                lines_to_add.extend(block)
+        added = 0
+        for name, entry in new_entries.items():
+            if name not in existing_models:
+                existing_models[name] = entry
                 added += 1
 
-            if not lines_to_add:
-                log(f"No new entries to add; leaving config unchanged: {out_path}")
-                return 0
-
-            if end > start + 1 and existing_lines[end - 1].strip():
-                lines_to_add = [""] + lines_to_add
-            existing_lines[end:end] = lines_to_add
-            new_text = "\n".join(existing_lines).rstrip() + "\n"
-            out_path.write_text(new_text, encoding="utf-8")
-            log(f"Updated config at: {out_path} (added {added} entr{'y' if added == 1 else 'ies'}).")
-        else:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(text, encoding="utf-8")
-            log(f"Wrote new config to: {out_path}")
-
+        existing_config["models"] = existing_models
+        save_yaml_file(out_path, existing_config)
+        log(f"Updated config at: {out_path} (added {added} entr{'y' if added == 1 else 'ies'}).")
         return 0
 
 

@@ -82,24 +82,19 @@ models:
       - https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF/discussions/10
 
   hf.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF:UD-Q4_K_XL:
-    settings:
-      temperature: 0.6
-      top_p: 0.95
-      top_k: 20
-      presence_penalty: 1.5
-      repetition_penalty: 1.0
+    modes:
+      thinking:
+        temperature: 0.6
+        top_p: 0.95
+        top_k: 20
+        min_p: 0
+        presence_penalty: 1.5 # ranges from 0 to 2, higher is worse performance
+        repetition_penalty: 1.0
+        suggested_out_t: 32768
+        suggested_complex_out_t: 81920
+        max_ctx: 262144
     sources:
-      - https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html
-      - https://huggingface.co/Qwen/Qwen3-0.6B
-
-  hf.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF:UD-Q3_K_XL:
-    settings:
-      temperature: 0.6
-      top_p: 0.95
-      top_k: 20
-      presence_penalty: 1.5
-      repetition_penalty: 1.0
-    sources:
+      - https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF
       - https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html
       - https://huggingface.co/Qwen/Qwen3-0.6B
 
