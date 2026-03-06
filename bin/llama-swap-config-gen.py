@@ -29,6 +29,8 @@ Optimization Strategy
   Special Case (Embeddings/Reranking): You must set -b and -ub to the same value, or the server may fail.
 
 Start with -b 2048 -ub 512. If your GPU memory (VRAM) is less than 50% full during processing, try doubling -ub to 1024 and check if your "tokens per second" (TPS) for prompt processing increases.
+
+For llama-swap config file, see: https://github.com/mostlygeek/llama-swap/blob/main/config.example.yaml
 """
 
 
