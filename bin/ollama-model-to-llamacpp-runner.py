@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 # Data model
 # ----------------------------
 
+
 @dataclass
 class LayerRef:
     media_type: str
@@ -39,6 +40,7 @@ class OllamaModelRecord:
 # ----------------------------
 # Helpers
 # ----------------------------
+
 
 def digest_to_blob_filename(digest: str) -> str:
     # "sha256:abcd" -> "sha256-abcd"
@@ -112,6 +114,7 @@ def maybe_parse_json(text: str) -> Optional[Dict[str, Any]]:
 # ----------------------------
 # Core functionality (mapping)
 # ----------------------------
+
 
 def build_model_record(
     model_tag: str,
@@ -231,6 +234,7 @@ def map_models(
 # ----------------------------
 # llama.cpp command generation
 # ----------------------------
+
 
 def pick_weights_blob(rec: OllamaModelRecord) -> Optional[LayerRef]:
     """
@@ -488,7 +492,7 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
         }
         for func, op in func_ops.items():
             if expr.startswith(func + " "):
-                args = split_top_level_args(expr[len(func):].strip())
+                args = split_top_level_args(expr[len(func) :].strip())
                 if len(args) >= 2:
                     left = convert_expr(args[0])
                     right = convert_expr(args[1])
@@ -496,7 +500,7 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
                 return expr
         for func, op in (("and", "and"), ("or", "or")):
             if expr.startswith(func + " "):
-                args = split_top_level_args(expr[len(func):].strip())
+                args = split_top_level_args(expr[len(func) :].strip())
                 if len(args) >= 2:
                     joined = f" {op} ".join(f"{convert_expr(a)}" for a in args)
                     return joined
@@ -530,7 +534,7 @@ def convert_ollama_template_to_llamacpp(template_text: str) -> Tuple[Optional[st
 
     pos = 0
     for m in token_re.finditer(template_text):
-        out.append(template_text[pos:m.start()])
+        out.append(template_text[pos : m.start()])
         token = m.group(1).strip()
         if token.startswith("if "):
             cond = convert_expr(token[3:].strip())
@@ -713,11 +717,11 @@ def shell_join(argv: List[str]) -> str:
 # CLI
 # ----------------------------
 
+
 def resolve_dirs(models_dir: Optional[Path], manifests_dir: Optional[Path], blobs_dir: Optional[Path]) -> Tuple[Path, Path]:
     if models_dir:
         md = models_dir.expanduser().resolve()
-        return ( (manifests_dir or (md / "manifests")).expanduser().resolve(),
-                 (blobs_dir or (md / "blobs")).expanduser().resolve() )
+        return ((manifests_dir or (md / "manifests")).expanduser().resolve(), (blobs_dir or (md / "blobs")).expanduser().resolve())
 
     if manifests_dir and blobs_dir:
         return (manifests_dir.expanduser().resolve(), blobs_dir.expanduser().resolve())
@@ -747,7 +751,7 @@ def main():
     if not blobs_dir.is_dir():
         raise SystemExit(f"ERROR: blobs dir not found: {blobs_dir}")
 
-    include_meta = (args.mode == "cmd")
+    include_meta = args.mode == "cmd"
 
     records = map_models(
         manifests_dir=manifests_dir,
@@ -765,8 +769,7 @@ def main():
         print("-" * 130)
         for rec in records:
             for layer in rec.layers:
-                print(f"{rec.model_tag:45} {layer.media_type:45} {human_size(layer.size):10} "
-                      f"{'yes' if layer.exists else 'no':6} {layer.blob_path}")
+                print(f"{rec.model_tag:45} {layer.media_type:45} {human_size(layer.size):10} {'yes' if layer.exists else 'no':6} {layer.blob_path}")
         return
 
     # cmd mode

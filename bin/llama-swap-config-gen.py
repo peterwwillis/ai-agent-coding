@@ -422,9 +422,7 @@ def resolve_batch_settings(
         if batch <= ubatch:
             raise ValueError("batch size must be greater than ubatch size")
     if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
-        log(
-            f"Auto batch settings for '{model_path.name}': -b {batch} -ub {ubatch} (profile: {profile.name}, model {model_size_gb:.1f} GB)"
-        )
+        log(f"Auto batch settings for '{model_path.name}': -b {batch} -ub {ubatch} (profile: {profile.name}, model {model_size_gb:.1f} GB)")
     return batch, ubatch
 
 
@@ -472,12 +470,7 @@ def parse_models_entries(lines: List[str], start: int, end: int) -> List[tuple[s
     i = start + 1
     while i < end:
         line = lines[i]
-        if (
-            line.startswith("  ")
-            and not line.startswith("    ")
-            and line.strip()
-            and not line.lstrip().startswith("#")
-        ):
+        if line.startswith("  ") and not line.startswith("    ") and line.strip() and not line.lstrip().startswith("#"):
             stripped = line.strip()
             if stripped.endswith(":") and not stripped.startswith("-"):
                 key = normalize_yaml_key_text(stripped[:-1].strip())
@@ -485,12 +478,7 @@ def parse_models_entries(lines: List[str], start: int, end: int) -> List[tuple[s
                 i += 1
                 while i < end:
                     next_line = lines[i]
-                    if (
-                        next_line.startswith("  ")
-                        and not next_line.startswith("    ")
-                        and next_line.strip()
-                        and not next_line.lstrip().startswith("#")
-                    ):
+                    if next_line.startswith("  ") and not next_line.startswith("    ") and next_line.strip() and not next_line.lstrip().startswith("#"):
                         if next_line.strip().endswith(":") and not next_line.strip().startswith("-"):
                             break
                     i += 1
@@ -726,11 +714,7 @@ def main() -> int:
         return 3
     log(f"Found {len(ggufs)} .gguf model(s).")
 
-    template_path = (
-        Path(args.template).expanduser()
-        if args.template
-        else Path(__file__).with_name("llama-swap.yaml.example")
-    )
+    template_path = Path(args.template).expanduser() if args.template else Path(__file__).with_name("llama-swap.yaml.example")
     header_lines = read_header(template_path)
     if template_path.is_file():
         log(f"Using template header from: {template_path}")
@@ -755,9 +739,7 @@ def main() -> int:
                 log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers} (block_count + 1)")
             else:
                 n_gpu_layers = DEFAULT_N_GPU_LAYERS
-                log(
-                    f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}."
-                )
+                log(f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}.")
         if n_gpu_layers is not None:
             log(f"Using n-gpu-layers for '{name}': {n_gpu_layers}")
 
@@ -767,11 +749,7 @@ def main() -> int:
             if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
                 if hardware_profile is None:
                     hardware_profile = detect_hardware_profile(log)
-                    vram_info = (
-                        f", {hardware_profile.vram_gb:.1f} GB VRAM"
-                        if hardware_profile.vram_gb
-                        else ""
-                    )
+                    vram_info = f", {hardware_profile.vram_gb:.1f} GB VRAM" if hardware_profile.vram_gb else ""
                     log(f"Auto batch profile: {hardware_profile.name}{vram_info}")
             try:
                 batch_size, ubatch_size = resolve_batch_settings(
