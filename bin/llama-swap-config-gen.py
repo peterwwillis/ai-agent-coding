@@ -1,344 +1,877 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-_T='--no-mmap'
-_S='--mmap'
-_R='--n-gpu-layers'
-_Q='--ubatch-size'
-_P='--batch-size'
-_O='--flash-attn'
-_N='--cache-type-v'
-_M='--cache-type-k'
-_L='--ctx-size'
-_K='nvidia'
-_J='replace'
-_I='Darwin'
-_H='    '
-_G='._-'
-_F=False
-_E='auto'
-_D='models:'
-_C=True
-_B='utf-8'
-_A=None
-import argparse,os,platform,shlex,struct,sys
+
+import argparse
+import os
+import platform
+import shlex
+import struct
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List,Optional
-DEFAULT_N_GPU_LAYERS='40'
-LOG_NAME_MAX=64
-BATCH_AUTO=_E
-HELP_EPILOG='Batch/ubatch guidance\n\nHardware Type                            Recommended -b   Recommended -ub   Why?\nHigh-End GPU (e.g., RTX 4090)            4096              1024 - 2048        Fully utilizes many CUDA cores; 2048 can reduce prompt processing time by ~25%.\nMid-Range GPU (8GB-12GB VRAM)           2048              512                Prevents OOM (Out of Memory) while maintaining decent speeds.\nCPU / Mixed Inference                   2048              1024               Can provide up to a 3x speed gain for MoE models (like Mixtral).\nApple Silicon (M2/M3 Max)               4096              1024               Efficiently uses high unified memory bandwidth.\n\nOptimization Strategy\n  For Speed (Prompt Processing): Increase -ub. Larger values allow the GPU to process more prompt tokens in parallel, though the benefit often plateaus at 2048.\n  For Memory (VRAM Constraints): Decrease -b and -ub. High values allocate more memory for the logits/embeddings buffer. If you hit an OOM error, lower both values to 512 or 256.\n  Special Case (Embeddings/Reranking): You must set -b and -ub to the same value, or the server may fail.\n\nStart with -b 2048 -ub 512. If your GPU memory (VRAM) is less than 50% full during processing, try doubling -ub to 1024 and check if your "tokens per second" (TPS) for prompt processing increases.\n'
-def default_llama_cache_dir():
-	D='.cache';A='llama.cpp';B=os.environ.get('LLAMA_CACHE')
-	if B:return Path(B).expanduser()
-	C=platform.system()
-	if C==_I:return Path.home()/'Library'/'Caches'/A
-	if C in{'Linux','FreeBSD','OpenBSD','NetBSD','AIX'}:E=os.environ.get('XDG_CACHE_HOME',str(Path.home()/D));return Path(E)/A
-	return Path.home()/D/A
-def default_llama_swap_config_path():return Path.home()/'.config'/'llama-swap'/'config.yaml'
-def read_gguf_chat_template(path):
-	F={0:1,1:1,2:2,3:2,4:4,5:4,6:4,7:1,10:8,11:8,12:8}
-	def C(f):
-		A=f.read(4)
-		if len(A)!=4:raise EOFError
-		return struct.unpack('<I',A)[0]
-	def B(f):
-		A=f.read(8)
-		if len(A)!=8:raise EOFError
-		return struct.unpack('<Q',A)[0]
-	def G(f):
-		A=B(f);C=f.read(A)
-		if len(C)!=A:raise EOFError
-		return C.decode(_B,errors=_J)
-	def D(f,vtype):
-		A=vtype
-		if A in F:f.seek(F[A],os.SEEK_CUR);return
-		if A==8:E=B(f);f.seek(E,os.SEEK_CUR);return
-		if A==9:
-			G=C(f);H=B(f)
-			for I in range(H):D(f,G)
-			return
-		raise ValueError(f"Unsupported GGUF value type: {A}")
-	try:
-		if not path.is_file():return
-		with path.open('rb')as A:
-			if A.read(4)!=b'GGUF':return
-			J=C(A);K=B(A);H=B(A)
-			for L in range(H):
-				I=G(A);E=C(A)
-				if I=='tokenizer.chat_template':
-					if E==8:return G(A)
-					D(A,E);return
-				D(A,E)
-	except Exception:return
-def read_gguf_block_count(path):
-	F={0:1,1:1,2:2,3:2,4:4,5:4,6:4,7:1,10:8,11:8,12:8};I={0:'<B',1:'<b',2:'<H',3:'<h',4:'<I',5:'<i',10:'<Q',11:'<q'}
-	def C(f):
-		A=f.read(4)
-		if len(A)!=4:raise EOFError
-		return struct.unpack('<I',A)[0]
-	def B(f):
-		A=f.read(8)
-		if len(A)!=8:raise EOFError
-		return struct.unpack('<Q',A)[0]
-	def J(f):
-		A=B(f);C=f.read(A)
-		if len(C)!=A:raise EOFError
-		return C.decode(_B,errors=_J)
-	def K(f,vtype):
-		A=I.get(vtype)
-		if not A:return
-		B=struct.calcsize(A);C=f.read(B)
-		if len(C)!=B:raise EOFError
-		return int(struct.unpack(A,C)[0])
-	def D(f,vtype):
-		A=vtype
-		if A in F:f.seek(F[A],os.SEEK_CUR);return
-		if A==8:E=B(f);f.seek(E,os.SEEK_CUR);return
-		if A==9:
-			G=C(f);H=B(f)
-			for I in range(H):D(f,G)
-			return
-		raise ValueError(f"Unsupported GGUF value type: {A}")
-	try:
-		if not path.is_file():return
-		with path.open('rb')as A:
-			if A.read(4)!=b'GGUF':return
-			M=C(A);N=B(A);L=B(A)
-			for O in range(L):
-				G=J(A);E=C(A)
-				if G.endswith('.block_count')or G in{'block_count','n_layer'}:
-					H=K(A,E)
-					if H is _A:D(A,E);return
-					return H
-				D(A,E)
-	except Exception:return
-def template_supports_thinking(path):
-	A=read_gguf_chat_template(path)
-	if not A:return _F
-	return'enable_thinking'in A
-def yaml_key(name):A=name;B=all(A.isalnum()or A in _G for A in A);return A if B else"'"+A.replace("'","''")+"'"
-def normalize_yaml_key_text(key):
-	A=key;A=A.strip()
-	if len(A)>=2 and A[0]==A[-1]and A[0]in("'",'"'):
-		B=A[1:-1]
-		if A[0]=="'":return B.replace("''","'")
-		return B.replace('\\"','"')
-	return A
-def sanitize_log_stem(name):
-	A=''.join(A if A.isalnum()or A in _G else'_'for A in name);A=A.strip(_G)
-	if not A:return'model'
-	return A[:LOG_NAME_MAX]
-def parse_n_gpu_layers(value):
-	A=value.strip().lower()
-	if A==_E:return A
-	if A.isdigit():return str(int(A))
-	raise argparse.ArgumentTypeError("n-gpu-layers must be an integer or 'auto'")
-def parse_batch_setting(value):
-	A=value.strip().lower()
-	if A==BATCH_AUTO:return A
-	if A.isdigit()and int(A)>0:return str(int(A))
-	raise argparse.ArgumentTypeError("batch size must be a positive integer or 'auto'")
-@dataclass(frozen=_C)
-class HardwareProfile:name:str;batch:int;ubatch:int;vram_gb:Optional[float]=_A
-def read_int_file(path):
-	try:return int(path.read_text(encoding=_B).strip())
-	except(OSError,ValueError):return
-def read_nvidia_vram_bytes():
-	B=Path('/proc/driver/nvidia/gpus')
-	if not B.is_dir():return
-	for F in B.glob('*/information'):
-		try:
-			for C in F.read_text(encoding=_B,errors='ignore').splitlines():
-				if'Video Memory'in C:
-					H,G=C.split(':',1);A=G.strip().split()
-					if len(A)>=2 and A[0].isdigit():
-						D=int(A[0]);E=A[1].lower()
-						if E.startswith('mb'):return D*1024*1024
-						if E.startswith('gb'):return D*1024*1024*1024
-		except OSError:continue
-def detect_linux_gpu(log):
-	A=log;E=Path('/sys/class/drm')
-	if not E.is_dir():A('No /sys/class/drm detected; skipping GPU vendor detection.');return _A,_A
-	for D in E.glob('card*/device/vendor'):
-		try:C=D.read_text(encoding=_B).strip().lower()
-		except OSError:continue
-		A(f"Detected DRM vendor {C} at {D.parent}");F=D.parent
-		if C=='0x1002':
-			B=read_int_file(F/'mem_info_vram_total')
-			if B:A(f"AMD VRAM total: {B/1024**3:.1f} GB")
-			else:A('AMD VRAM total not available from mem_info_vram_total.')
-			return'amd',B
-		if C=='0x10de':
-			B=read_nvidia_vram_bytes()
-			if B:A(f"NVIDIA VRAM total: {B/1024**3:.1f} GB")
-			else:A('NVIDIA VRAM total not available from /proc/driver/nvidia/gpus.')
-			return _K,B
-		if C=='0x8086':A('Intel GPU detected; treating as mixed inference profile.');return'intel',_A
-	return _A,_A
-def detect_hardware_profile(log):
-	H='cpu/mixed';G='mid-range-gpu';B=log;C=platform.system();D=platform.machine().lower();B(f"Platform: {C} ({D})")
-	if C==_I and D in{'arm64','aarch64'}:B('Apple Silicon detected; using Apple Silicon batch profile.');return HardwareProfile('apple-silicon',4096,1024)
-	if C=='Linux':
-		E,F=detect_linux_gpu(B);A=F/1024**3 if F else _A
-		if E in{'amd',_K}:
-			if A is not _A and A>=20:B('High-end GPU detected; using 4096/1024 batch profile.');return HardwareProfile('high-end-gpu',4096,1024,A)
-			if A is not _A and A>=8:B('Mid-range GPU detected; using 2048/512 batch profile.');return HardwareProfile(G,2048,512,A)
-			if A is not _A and A<8:B('Low VRAM GPU detected; using 1024/256 batch profile.');return HardwareProfile('low-vram-gpu',1024,256,A)
-			B('GPU detected without VRAM info; using mid-range GPU profile.');return HardwareProfile(G,2048,512,A)
-		if E=='intel':B('Intel GPU detected; using CPU/mixed batch profile.');return HardwareProfile(H,2048,1024)
-		B('No discrete GPU detected; using CPU/mixed batch profile.')
-	return HardwareProfile(H,2048,1024)
-def auto_batch_settings(profile,model_size_gb,log):
-	E=profile;D=model_size_gb;C=log;B=E.batch;A=E.ubatch;C(f"Auto batch baseline from profile '{E.name}': -b {B} -ub {A}");C(f"Model size: {D:.1f} GB")
-	if D>=20:B=min(B,2048);A=min(A,512);C('Model >= 20 GB; capping batch/ubatch to 2048/512.')
-	elif D>=12:B=min(B,2048);A=min(A,512);C('Model >= 12 GB; capping batch/ubatch to 2048/512.')
-	elif D<=4:
-		if B>=4096:A=max(A,2048);C('Small model; increasing ubatch to at least 2048.')
-		elif B>=2048:A=max(A,1024);C('Small model; increasing ubatch to at least 1024.')
-	else:C('No size-based batch adjustments needed.')
-	if B<=A:B=max(A+1,A*2);C(f"Adjusted batch to keep batch > ubatch: -b {B} -ub {A}")
-	return B,A
-def resolve_batch_settings(batch_arg,ubatch_arg,allow_equal,profile,model_path,log):
-	G=model_path;F=profile;C=log;B=ubatch_arg;A=batch_arg;H=G.stat().st_size/1024**3;I=_A;J=_A
-	if A==BATCH_AUTO or B==BATCH_AUTO:
-		if F is _A:raise ValueError('auto batch sizing requires a detected hardware profile')
-		I,J=auto_batch_settings(F,H,C)
-	D=I if A==BATCH_AUTO else int(A);E=J if B==BATCH_AUTO else int(B)
-	if A!=BATCH_AUTO:C(f"Using explicit batch size: -b {D}")
-	if B!=BATCH_AUTO:C(f"Using explicit ubatch size: -ub {E}")
-	if allow_equal:
-		C('Allowing batch == ubatch for embeddings/reranking mode.')
-		if D<E:raise ValueError('batch size must be greater than or equal to ubatch size')
-	elif D<=E:raise ValueError('batch size must be greater than ubatch size')
-	if A==BATCH_AUTO or B==BATCH_AUTO:C(f"Auto batch settings for '{G.name}': -b {D} -ub {E} (profile: {F.name}, model {H:.1f} GB)")
-	return D,E
-def parse_flash_attn(value):
-	A=value.strip().lower()
-	if A in{'on','off',_E}:return A
-	raise argparse.ArgumentTypeError('flash-attn must be one of: on, off, auto')
-def find_models_block(lines):
-	A=lines;B=_A
-	for(F,G)in enumerate(A):
-		if G.strip().startswith(_D):B=F;break
-	if B is _A:return _A,len(A)
-	D=len(A)
-	for C in range(B+1,len(A)):
-		E=A[C].lstrip()
-		if not E or E.startswith('#'):continue
-		if not A[C].startswith(' '):D=C;break
-	return B,D
-def existing_model_keys(lines,start,end):
-	C=set()
-	for A in lines[start+1:end]:
-		if not A.strip()or A.lstrip().startswith('#'):continue
-		if A.startswith('  ')and not A.startswith(_H):
-			B=A.strip()
-			if B.endswith(':')and not B.startswith('-'):D=B[:-1].strip();C.add(normalize_yaml_key_text(D))
-	return C
-def parse_models_entries(lines,start,end):
-	E=lines;F=[];A=start+1
-	while A<end:
-		C=E[A]
-		if C.startswith('  ')and not C.startswith(_H)and C.strip()and not C.lstrip().startswith('#'):
-			D=C.strip()
-			if D.endswith(':')and not D.startswith('-'):
-				G=normalize_yaml_key_text(D[:-1].strip());H=A;A+=1
-				while A<end:
-					B=E[A]
-					if B.startswith('  ')and not B.startswith(_H)and B.strip()and not B.lstrip().startswith('#'):
-						if B.strip().endswith(':')and not B.strip().startswith('-'):break
-					A+=1
-				I=A;F.append((G,H,I));continue
-		A+=1
-	return F
-def read_header(template_path):
-	B=template_path
-	if not B or not B.is_file():return[_D]
-	D=B.read_text(encoding=_B).splitlines();A=[]
-	for C in D:
-		A.append(C)
-		if C.strip().startswith(_D):return A
-	A.append(_D);return A
-def build_cmd(llama_server,model_path,thinking,ctx_size,flash_attn,cache_type_k,cache_type_v,n_gpu_layers,mmap,batch_size,ubatch_size,log_file):
-	E=ubatch_size;D=batch_size;C=n_gpu_layers;B=thinking;A=[shlex.quote(llama_server),'--offline','--log-file',shlex.quote(str(log_file)),'--log-colors','off','--log-prefix','--log-timestamps','-m',shlex.quote(str(model_path)),_L,str(ctx_size),_M,shlex.quote(cache_type_k),_N,shlex.quote(cache_type_v),_O,shlex.quote(flash_attn)]
-	if D is not _A and E is not _A:A.extend([_P,str(D),_Q,str(E)])
-	if C is not _A:A.extend([_R,str(C)])
-	A.append(_S if mmap else _T)
-	if B is not _A:F='true'if B else'false';A.extend(['--chat-template-kwargs',f"'{{\"enable_thinking\":{F}}}'"])
-	A.extend(['--port','${PORT}']);return' '.join(A)
-def main():
-	n='ies';m='mmap';l='q8_0';W='\n';P='store_true';D=argparse.ArgumentParser(description='Generate a llama-swap config from llama.cpp cached GGUF models.',formatter_class=argparse.RawDescriptionHelpFormatter,epilog=HELP_EPILOG);D.add_argument('--llama-server',default=os.environ.get('LLAMA_SERVER','llama-server'),help='Path to llama-server binary (default: llama-server or $LLAMA_SERVER).');D.add_argument('--models-dir',default=os.environ.get('LLAMA_MODELS_DIR',str(default_llama_cache_dir())),help='Directory containing GGUF models (default: llama.cpp cache or $LLAMA_MODELS_DIR).');D.add_argument('--output',default=os.environ.get('LLAMA_SWAP_CONFIG',str(default_llama_swap_config_path())),help="Write output YAML to this path (use '-' for stdout).");D.add_argument('--template',default=_A,help='Optional header template file (default: llama-swap.yaml.example next to this script).');D.add_argument(_L,type=int,default=2048,help='Context size (default: 2048).');D.add_argument(_O,type=parse_flash_attn,default='on',help='Flash attention mode: on, off, auto (default: on).');D.add_argument(_M,default=l,help='KV cache K quantization type (default: q8_0).');D.add_argument(_N,default=l,help='KV cache V quantization type (default: q8_0).');D.add_argument(_R,type=parse_n_gpu_layers,default=_A,help='Number of layers to offload to GPU (default: not passed unless set).');D.add_argument('--gpu-layer-autodetect',action=P,help='Auto-detect GPU layers from model metadata.');D.add_argument(_S,dest=m,action=P,default=_C,help='Enable memory-mapped model loading (default).');D.add_argument(_T,dest=m,action='store_false',help='Disable memory-mapped model loading.');D.add_argument(_P,type=parse_batch_setting,default=_A,help='Batch size (default: not passed unless set).');D.add_argument(_Q,type=parse_batch_setting,default=_A,help='Ubatch size (default: not passed unless set).');D.add_argument('--batch-size-autodetect',action=P,help='Auto-detect batch/ubatch size based on hardware and model.');D.add_argument('--allow-equal-batch',action=P,help='Allow batch size to equal ubatch size (for embeddings/reranking).');D.add_argument('--verbose',action=P,help='Print progress to stderr.');D.add_argument('--prune-missing',action=P,help='Remove model entries not present in the llama.cpp cache.');A=D.parse_args();B=(lambda msg:print(msg,file=sys.stderr))if A.verbose else lambda _msg:_A
-	if(A.batch_size==BATCH_AUTO or A.ubatch_size==BATCH_AUTO)and not A.batch_size_autodetect:print("ERROR: batch size 'auto' requires --batch-size-autodetect.",file=sys.stderr);return 2
-	if(A.batch_size is _A)!=(A.ubatch_size is _A):print('ERROR: --batch-size and --ubatch-size must be provided together.',file=sys.stderr);return 2
-	X=default_llama_cache_dir()
-	try:X.mkdir(parents=_C,exist_ok=_C)
-	except OSError as Y:print(f"ERROR: unable to create log directory: {X} ({Y})",file=sys.stderr);return 2
-	L=_A;M=A.batch_size;N=A.ubatch_size
-	if A.batch_size_autodetect:
-		if M is _A and N is _A:M=BATCH_AUTO;N=BATCH_AUTO;B('Batch size autodetect enabled; using auto batch/ubatch.')
-		else:B('Batch size autodetect enabled, but explicit batch/ubatch provided; skipping auto.')
-	elif M is _A and N is _A:B('Batch/ubatch not provided; leaving llama-server defaults.')
-	else:B('Using explicit batch/ubatch values; autodetect disabled.')
-	Z=A.n_gpu_layers
-	if A.gpu_layer_autodetect:
-		if Z is _A:B('GPU layer autodetect enabled; using GGUF block_count.')
-		else:B('GPU layer autodetect enabled, but explicit n-gpu-layers provided; skipping auto.')
-	elif Z is _A:B('n-gpu-layers not provided; leaving llama-server defaults.')
-	else:B('Using explicit n-gpu-layers; autodetect disabled.')
-	Q=Path(A.models_dir).expanduser()
-	if not Q.is_dir():print(f"ERROR: models directory not found: {Q}",file=sys.stderr);return 2
-	B(f"Scanning for .gguf models under: {Q}");a=sorted(A for A in Q.rglob('*.gguf')if A.is_file())
-	if not a:print(f"ERROR: no .gguf files found under: {Q}",file=sys.stderr);return 3
-	B(f"Found {len(a)} .gguf model(s).");b=Path(A.template).expanduser()if A.template else Path(__file__).with_name('llama-swap.yaml.example');o=read_header(b)
-	if b.is_file():B(f"Using template header from: {b}")
-	else:B('Template header not found; using minimal header.')
-	g={};O=[]
-	for J in a:
-		R=J.stem;c=g.get(R,0)+1;g[R]=c;E=R if c==1 else f"{R}-{c}";S=X/f"llama-swap-{sanitize_log_stem(E)}.log";B(f"Log file for '{E}': {S}");F=Z
-		if F is _A and A.gpu_layer_autodetect:
-			h=read_gguf_block_count(J)
-			if h:F=str(h+1);B(f"Auto n-gpu-layers for '{E}': {F} (block_count + 1)")
-			else:F=DEFAULT_N_GPU_LAYERS;B(f"Could not read block_count for '{E}'; using n-gpu-layers={F}.")
-		if F is not _A:B(f"Using n-gpu-layers for '{E}': {F}")
-		T=_A;U=_A
-		if M is not _A and N is not _A:
-			if M==BATCH_AUTO or N==BATCH_AUTO:
-				if L is _A:L=detect_hardware_profile(B);p=f", {L.vram_gb:.1f} GB VRAM"if L.vram_gb else'';B(f"Auto batch profile: {L.name}{p}")
-			try:T,U=resolve_batch_settings(M,N,A.allow_equal_batch,L,J,B)
-			except ValueError as Y:print(f"ERROR: {Y} for model '{E}'",file=sys.stderr);return 2
-		i=template_supports_thinking(J);B(f"Adding model '{E}' (thinking optional: {"yes"if i else"no"}).")
-		if i:O.append((E,[f"  {yaml_key(E)}:",f"    cmd: {build_cmd(A.llama_server,J,_F,A.ctx_size,A.flash_attn,A.cache_type_k,A.cache_type_v,F,A.mmap,T,U,S)}"]));O.append((f"{E}-thinking",[f"  {yaml_key(E)}-thinking:",f"    cmd: {build_cmd(A.llama_server,J,_C,A.ctx_size,A.flash_attn,A.cache_type_k,A.cache_type_v,F,A.mmap,T,U,S)}"]))
-		else:O.append((E,[f"  {yaml_key(E)}:",f"    cmd: {build_cmd(A.llama_server,J,_A,A.ctx_size,A.flash_attn,A.cache_type_k,A.cache_type_v,F,A.mmap,T,U,S)}"]))
-	d=[]
-	for(A0,e)in O:d.extend(e);d.append('')
-	q=o+['']+d;j=W.join(q).rstrip()+W
-	if A.output=='-':sys.stdout.write(j);B('Wrote config to stdout.');return 0
-	I=Path(A.output).expanduser()
-	if I.exists():
-		C=I.read_text(encoding=_B).splitlines();G,H=find_models_block(C)
-		if G is _A:
-			if C and C[-1].strip():C.append('')
-			C.append(_D);G=len(C)-1;H=len(C)
-		if G is not _A and A.prune_missing:
-			r=parse_models_entries(C,G,H);s={A for(A,B)in O};k=[_C]*len(C);V=0
-			for(t,u,v)in r:
-				if t in s:continue
-				for w in range(u,v):k[w]=_F
-				V+=1
-			if V:C=[B for(A,B)in enumerate(C)if k[A]];G,H=find_models_block(C);B(f"Pruned {V} missing model entr{"y"if V==1 else n}.")
-		G,H=find_models_block(C)
-		if G is _A:
-			if C and C[-1].strip():C.append('')
-			C.append(_D);G=len(C)-1;H=len(C)
-		x=existing_model_keys(C,G,H);K=[];f=0
-		for(y,e)in O:
-			if y in x:continue
-			if K:K.append('')
-			K.extend(e);f+=1
-		if not K:B(f"No new entries to add; leaving config unchanged: {I}");return 0
-		if H>G+1 and C[H-1].strip():K=['']+K
-		C[H:H]=K;z=W.join(C).rstrip()+W;I.write_text(z,encoding=_B);B(f"Updated config at: {I} (added {f} entr{"y"if f==1 else n}).")
-	else:I.parent.mkdir(parents=_C,exist_ok=_C);I.write_text(j,encoding=_B);B(f"Wrote new config to: {I}")
-	return 0
-if __name__=='__main__':raise SystemExit(main())
+from typing import List, Optional
+
+DEFAULT_N_GPU_LAYERS = "40"
+LOG_NAME_MAX = 64
+BATCH_AUTO = "auto"
+
+HELP_EPILOG = """Batch/ubatch guidance
+
+Hardware Type                            Recommended -b   Recommended -ub   Why?
+High-End GPU (e.g., RTX 4090)            4096              1024 - 2048        Fully utilizes many CUDA cores; 2048 can reduce prompt processing time by ~25%.
+Mid-Range GPU (8GB-12GB VRAM)           2048              512                Prevents OOM (Out of Memory) while maintaining decent speeds.
+CPU / Mixed Inference                   2048              1024               Can provide up to a 3x speed gain for MoE models (like Mixtral).
+Apple Silicon (M2/M3 Max)               4096              1024               Efficiently uses high unified memory bandwidth.
+
+Optimization Strategy
+  For Speed (Prompt Processing): Increase -ub. Larger values allow the GPU to process more prompt tokens in parallel, though the benefit often plateaus at 2048.
+  For Memory (VRAM Constraints): Decrease -b and -ub. High values allocate more memory for the logits/embeddings buffer. If you hit an OOM error, lower both values to 512 or 256.
+  Special Case (Embeddings/Reranking): You must set -b and -ub to the same value, or the server may fail.
+
+Start with -b 2048 -ub 512. If your GPU memory (VRAM) is less than 50% full during processing, try doubling -ub to 1024 and check if your "tokens per second" (TPS) for prompt processing increases.
+"""
+
+
+def default_llama_cache_dir() -> Path:
+    override = os.environ.get("LLAMA_CACHE")
+    if override:
+        return Path(override).expanduser()
+
+    system = platform.system()
+    if system == "Darwin":
+        return Path.home() / "Library" / "Caches" / "llama.cpp"
+    if system in {"Linux", "FreeBSD", "OpenBSD", "NetBSD", "AIX"}:
+        base = os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
+        return Path(base) / "llama.cpp"
+    return Path.home() / ".cache" / "llama.cpp"
+
+
+def default_llama_swap_config_path() -> Path:
+    return Path.home() / ".config" / "llama-swap" / "config.yaml"
+
+
+def read_gguf_chat_template(path: Path) -> Optional[str]:
+    gguf_types = {
+        0: 1,  # UINT8
+        1: 1,  # INT8
+        2: 2,  # UINT16
+        3: 2,  # INT16
+        4: 4,  # UINT32
+        5: 4,  # INT32
+        6: 4,  # FLOAT32
+        7: 1,  # BOOL
+        10: 8,  # UINT64
+        11: 8,  # INT64
+        12: 8,  # FLOAT64
+    }
+
+    def read_u32(f) -> int:
+        data = f.read(4)
+        if len(data) != 4:
+            raise EOFError
+        return struct.unpack("<I", data)[0]
+
+    def read_u64(f) -> int:
+        data = f.read(8)
+        if len(data) != 8:
+            raise EOFError
+        return struct.unpack("<Q", data)[0]
+
+    def read_str(f) -> str:
+        length = read_u64(f)
+        data = f.read(length)
+        if len(data) != length:
+            raise EOFError
+        return data.decode("utf-8", errors="replace")
+
+    def skip_value(f, vtype: int):
+        if vtype in gguf_types:
+            f.seek(gguf_types[vtype], os.SEEK_CUR)
+            return
+        if vtype == 8:  # STRING
+            length = read_u64(f)
+            f.seek(length, os.SEEK_CUR)
+            return
+        if vtype == 9:  # ARRAY
+            elem_type = read_u32(f)
+            count = read_u64(f)
+            for _ in range(count):
+                skip_value(f, elem_type)
+            return
+        raise ValueError(f"Unsupported GGUF value type: {vtype}")
+
+    try:
+        if not path.is_file():
+            return None
+        with path.open("rb") as f:
+            if f.read(4) != b"GGUF":
+                return None
+            _version = read_u32(f)
+            _tensor_count = read_u64(f)
+            kv_count = read_u64(f)
+            for _ in range(kv_count):
+                key = read_str(f)
+                vtype = read_u32(f)
+                if key == "tokenizer.chat_template":
+                    if vtype == 8:
+                        return read_str(f)
+                    skip_value(f, vtype)
+                    return None
+                skip_value(f, vtype)
+    except Exception:
+        return None
+
+    return None
+
+
+def read_gguf_block_count(path: Path) -> Optional[int]:
+    gguf_types = {
+        0: 1,  # UINT8
+        1: 1,  # INT8
+        2: 2,  # UINT16
+        3: 2,  # INT16
+        4: 4,  # UINT32
+        5: 4,  # INT32
+        6: 4,  # FLOAT32
+        7: 1,  # BOOL
+        10: 8,  # UINT64
+        11: 8,  # INT64
+        12: 8,  # FLOAT64
+    }
+    int_types = {
+        0: "<B",
+        1: "<b",
+        2: "<H",
+        3: "<h",
+        4: "<I",
+        5: "<i",
+        10: "<Q",
+        11: "<q",
+    }
+
+    def read_u32(f) -> int:
+        data = f.read(4)
+        if len(data) != 4:
+            raise EOFError
+        return struct.unpack("<I", data)[0]
+
+    def read_u64(f) -> int:
+        data = f.read(8)
+        if len(data) != 8:
+            raise EOFError
+        return struct.unpack("<Q", data)[0]
+
+    def read_str(f) -> str:
+        length = read_u64(f)
+        data = f.read(length)
+        if len(data) != length:
+            raise EOFError
+        return data.decode("utf-8", errors="replace")
+
+    def read_int_value(f, vtype: int) -> Optional[int]:
+        fmt = int_types.get(vtype)
+        if not fmt:
+            return None
+        size = struct.calcsize(fmt)
+        data = f.read(size)
+        if len(data) != size:
+            raise EOFError
+        return int(struct.unpack(fmt, data)[0])
+
+    def skip_value(f, vtype: int):
+        if vtype in gguf_types:
+            f.seek(gguf_types[vtype], os.SEEK_CUR)
+            return
+        if vtype == 8:  # STRING
+            length = read_u64(f)
+            f.seek(length, os.SEEK_CUR)
+            return
+        if vtype == 9:  # ARRAY
+            elem_type = read_u32(f)
+            count = read_u64(f)
+            for _ in range(count):
+                skip_value(f, elem_type)
+            return
+        raise ValueError(f"Unsupported GGUF value type: {vtype}")
+
+    try:
+        if not path.is_file():
+            return None
+        with path.open("rb") as f:
+            if f.read(4) != b"GGUF":
+                return None
+            _version = read_u32(f)
+            _tensor_count = read_u64(f)
+            kv_count = read_u64(f)
+            for _ in range(kv_count):
+                key = read_str(f)
+                vtype = read_u32(f)
+                if key.endswith(".block_count") or key in {"block_count", "n_layer"}:
+                    value = read_int_value(f, vtype)
+                    if value is None:
+                        skip_value(f, vtype)
+                        return None
+                    return value
+                skip_value(f, vtype)
+    except Exception:
+        return None
+
+    return None
+
+
+def template_supports_thinking(path: Path) -> bool:
+    template = read_gguf_chat_template(path)
+    if not template:
+        return False
+    return "enable_thinking" in template
+
+
+def yaml_key(name: str) -> str:
+    safe = all(ch.isalnum() or ch in "._-" for ch in name)
+    return name if safe else "'" + name.replace("'", "''") + "'"
+
+
+def normalize_yaml_key_text(key: str) -> str:
+    key = key.strip()
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in ("'", '"'):
+        inner = key[1:-1]
+        if key[0] == "'":
+            return inner.replace("''", "'")
+        return inner.replace('\\"', '"')
+    return key
+
+
+def sanitize_log_stem(name: str) -> str:
+    cleaned = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)
+    cleaned = cleaned.strip("._-")
+    if not cleaned:
+        return "model"
+    return cleaned[:LOG_NAME_MAX]
+
+
+def parse_n_gpu_layers(value: str) -> str:
+    v = value.strip().lower()
+    if v == "auto":
+        return v
+    if v.isdigit():
+        return str(int(v))
+    raise argparse.ArgumentTypeError("n-gpu-layers must be an integer or 'auto'")
+
+
+def parse_batch_setting(value: str) -> str:
+    v = value.strip().lower()
+    if v == BATCH_AUTO:
+        return v
+    if v.isdigit() and int(v) > 0:
+        return str(int(v))
+    raise argparse.ArgumentTypeError("batch size must be a positive integer or 'auto'")
+
+
+@dataclass(frozen=True)
+class HardwareProfile:
+    name: str
+    batch: int
+    ubatch: int
+    vram_gb: Optional[float] = None
+
+
+def read_int_file(path: Path) -> Optional[int]:
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def read_nvidia_vram_bytes() -> Optional[int]:
+    base = Path("/proc/driver/nvidia/gpus")
+    if not base.is_dir():
+        return None
+    for info in base.glob("*/information"):
+        try:
+            for line in info.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if "Video Memory" in line:
+                    _, value = line.split(":", 1)
+                    parts = value.strip().split()
+                    if len(parts) >= 2 and parts[0].isdigit():
+                        size = int(parts[0])
+                        unit = parts[1].lower()
+                        if unit.startswith("mb"):
+                            return size * 1024 * 1024
+                        if unit.startswith("gb"):
+                            return size * 1024 * 1024 * 1024
+        except OSError:
+            continue
+    return None
+
+
+def detect_linux_gpu(log) -> tuple[Optional[str], Optional[int]]:
+    drm = Path("/sys/class/drm")
+    if not drm.is_dir():
+        log("No /sys/class/drm detected; skipping GPU vendor detection.")
+        return None, None
+    for vendor_path in drm.glob("card*/device/vendor"):
+        try:
+            vendor = vendor_path.read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            continue
+        log(f"Detected DRM vendor {vendor} at {vendor_path.parent}")
+        device_dir = vendor_path.parent
+        if vendor == "0x1002":
+            vram_bytes = read_int_file(device_dir / "mem_info_vram_total")
+            if vram_bytes:
+                log(f"AMD VRAM total: {vram_bytes / (1024**3):.1f} GB")
+            else:
+                log("AMD VRAM total not available from mem_info_vram_total.")
+            return "amd", vram_bytes
+        if vendor == "0x10de":
+            vram_bytes = read_nvidia_vram_bytes()
+            if vram_bytes:
+                log(f"NVIDIA VRAM total: {vram_bytes / (1024**3):.1f} GB")
+            else:
+                log("NVIDIA VRAM total not available from /proc/driver/nvidia/gpus.")
+            return "nvidia", vram_bytes
+        if vendor == "0x8086":
+            log("Intel GPU detected; treating as mixed inference profile.")
+            return "intel", None
+    return None, None
+
+
+def detect_hardware_profile(log) -> HardwareProfile:
+    system = platform.system()
+    machine = platform.machine().lower()
+    log(f"Platform: {system} ({machine})")
+    if system == "Darwin" and machine in {"arm64", "aarch64"}:
+        log("Apple Silicon detected; using Apple Silicon batch profile.")
+        return HardwareProfile("apple-silicon", 4096, 1024)
+    if system == "Linux":
+        vendor, vram_bytes = detect_linux_gpu(log)
+        vram_gb = vram_bytes / (1024**3) if vram_bytes else None
+        if vendor in {"amd", "nvidia"}:
+            if vram_gb is not None and vram_gb >= 20:
+                log("High-end GPU detected; using 4096/1024 batch profile.")
+                return HardwareProfile("high-end-gpu", 4096, 1024, vram_gb)
+            if vram_gb is not None and vram_gb >= 8:
+                log("Mid-range GPU detected; using 2048/512 batch profile.")
+                return HardwareProfile("mid-range-gpu", 2048, 512, vram_gb)
+            if vram_gb is not None and vram_gb < 8:
+                log("Low VRAM GPU detected; using 1024/256 batch profile.")
+                return HardwareProfile("low-vram-gpu", 1024, 256, vram_gb)
+            log("GPU detected without VRAM info; using mid-range GPU profile.")
+            return HardwareProfile("mid-range-gpu", 2048, 512, vram_gb)
+        if vendor == "intel":
+            log("Intel GPU detected; using CPU/mixed batch profile.")
+            return HardwareProfile("cpu/mixed", 2048, 1024)
+        log("No discrete GPU detected; using CPU/mixed batch profile.")
+    return HardwareProfile("cpu/mixed", 2048, 1024)
+
+
+def auto_batch_settings(profile: HardwareProfile, model_size_gb: float, log) -> tuple[int, int]:
+    batch = profile.batch
+    ubatch = profile.ubatch
+    log(f"Auto batch baseline from profile '{profile.name}': -b {batch} -ub {ubatch}")
+    log(f"Model size: {model_size_gb:.1f} GB")
+    if model_size_gb >= 20:
+        batch = min(batch, 2048)
+        ubatch = min(ubatch, 512)
+        log("Model >= 20 GB; capping batch/ubatch to 2048/512.")
+    elif model_size_gb >= 12:
+        batch = min(batch, 2048)
+        ubatch = min(ubatch, 512)
+        log("Model >= 12 GB; capping batch/ubatch to 2048/512.")
+    elif model_size_gb <= 4:
+        if batch >= 4096:
+            ubatch = max(ubatch, 2048)
+            log("Small model; increasing ubatch to at least 2048.")
+        elif batch >= 2048:
+            ubatch = max(ubatch, 1024)
+            log("Small model; increasing ubatch to at least 1024.")
+    else:
+        log("No size-based batch adjustments needed.")
+    if batch <= ubatch:
+        batch = max(ubatch + 1, ubatch * 2)
+        log(f"Adjusted batch to keep batch > ubatch: -b {batch} -ub {ubatch}")
+    return batch, ubatch
+
+
+def resolve_batch_settings(
+    batch_arg: str,
+    ubatch_arg: str,
+    allow_equal: bool,
+    profile: Optional[HardwareProfile],
+    model_path: Path,
+    log,
+) -> tuple[int, int]:
+    model_size_gb = model_path.stat().st_size / (1024**3)
+    auto_batch = None
+    auto_ubatch = None
+    if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+        if profile is None:
+            raise ValueError("auto batch sizing requires a detected hardware profile")
+        auto_batch, auto_ubatch = auto_batch_settings(profile, model_size_gb, log)
+    batch = auto_batch if batch_arg == BATCH_AUTO else int(batch_arg)
+    ubatch = auto_ubatch if ubatch_arg == BATCH_AUTO else int(ubatch_arg)
+    if batch_arg != BATCH_AUTO:
+        log(f"Using explicit batch size: -b {batch}")
+    if ubatch_arg != BATCH_AUTO:
+        log(f"Using explicit ubatch size: -ub {ubatch}")
+    if allow_equal:
+        log("Allowing batch == ubatch for embeddings/reranking mode.")
+        if batch < ubatch:
+            raise ValueError("batch size must be greater than or equal to ubatch size")
+    else:
+        if batch <= ubatch:
+            raise ValueError("batch size must be greater than ubatch size")
+    if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+        log(f"Auto batch settings for '{model_path.name}': -b {batch} -ub {ubatch} (profile: {profile.name}, model {model_size_gb:.1f} GB)")
+    return batch, ubatch
+
+
+def parse_flash_attn(value: str) -> str:
+    v = value.strip().lower()
+    if v in {"on", "off", "auto"}:
+        return v
+    raise argparse.ArgumentTypeError("flash-attn must be one of: on, off, auto")
+
+
+def find_models_block(lines: List[str]) -> tuple[Optional[int], int]:
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith("models:"):
+            start = i
+            break
+    if start is None:
+        return None, len(lines)
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        stripped = lines[j].lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not lines[j].startswith(" "):
+            end = j
+            break
+    return start, end
+
+
+def existing_model_keys(lines: List[str], start: int, end: int) -> set[str]:
+    keys: set[str] = set()
+    for line in lines[start + 1 : end]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line.startswith("  ") and not line.startswith("    "):
+            stripped = line.strip()
+            if stripped.endswith(":") and not stripped.startswith("-"):
+                key = stripped[:-1].strip()
+                keys.add(normalize_yaml_key_text(key))
+    return keys
+
+
+def parse_models_entries(lines: List[str], start: int, end: int) -> List[tuple[str, int, int]]:
+    entries: List[tuple[str, int, int]] = []
+    i = start + 1
+    while i < end:
+        line = lines[i]
+        if line.startswith("  ") and not line.startswith("    ") and line.strip() and not line.lstrip().startswith("#"):
+            stripped = line.strip()
+            if stripped.endswith(":") and not stripped.startswith("-"):
+                key = normalize_yaml_key_text(stripped[:-1].strip())
+                entry_start = i
+                i += 1
+                while i < end:
+                    next_line = lines[i]
+                    if next_line.startswith("  ") and not next_line.startswith("    ") and next_line.strip() and not next_line.lstrip().startswith("#"):
+                        if next_line.strip().endswith(":") and not next_line.strip().startswith("-"):
+                            break
+                    i += 1
+                entry_end = i
+                entries.append((key, entry_start, entry_end))
+                continue
+        i += 1
+    return entries
+
+
+def read_header(template_path: Optional[Path]) -> List[str]:
+    if not template_path or not template_path.is_file():
+        return ["models:"]
+
+    lines = template_path.read_text(encoding="utf-8").splitlines()
+    header: List[str] = []
+    for line in lines:
+        header.append(line)
+        if line.strip().startswith("models:"):
+            return header
+    header.append("models:")
+    return header
+
+
+def build_cmd(
+    llama_server: str,
+    model_path: Path,
+    thinking: Optional[bool],
+    ctx_size: int,
+    flash_attn: str,
+    cache_type_k: str,
+    cache_type_v: str,
+    n_gpu_layers: Optional[str],
+    mmap: bool,
+    batch_size: Optional[int],
+    ubatch_size: Optional[int],
+    log_file: Path,
+) -> str:
+    cmd_parts = [
+        shlex.quote(llama_server),
+        "--offline",
+        "--log-file",
+        shlex.quote(str(log_file)),
+        "--log-colors",
+        "off",
+        "--log-prefix",
+        "--log-timestamps",
+        "-m",
+        shlex.quote(str(model_path)),
+        "--ctx-size",
+        str(ctx_size),
+        "--cache-type-k",
+        shlex.quote(cache_type_k),
+        "--cache-type-v",
+        shlex.quote(cache_type_v),
+        "--flash-attn",
+        shlex.quote(flash_attn),
+    ]
+    if batch_size is not None and ubatch_size is not None:
+        cmd_parts.extend(["--batch-size", str(batch_size), "--ubatch-size", str(ubatch_size)])
+    if n_gpu_layers is not None:
+        cmd_parts.extend(["--n-gpu-layers", str(n_gpu_layers)])
+    cmd_parts.append("--mmap" if mmap else "--no-mmap")
+    if thinking is not None:
+        val = "true" if thinking else "false"
+        cmd_parts.extend(["--chat-template-kwargs", f"'{{\"enable_thinking\":{val}}}'"])
+    cmd_parts.extend(["--port", "${PORT}"])
+    return " ".join(cmd_parts)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate a llama-swap config from llama.cpp cached GGUF models.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=HELP_EPILOG,
+    )
+    parser.add_argument(
+        "--llama-server",
+        default=os.environ.get("LLAMA_SERVER", "llama-server"),
+        help="Path to llama-server binary (default: llama-server or $LLAMA_SERVER).",
+    )
+    parser.add_argument(
+        "--models-dir",
+        default=os.environ.get("LLAMA_MODELS_DIR", str(default_llama_cache_dir())),
+        help="Directory containing GGUF models (default: llama.cpp cache or $LLAMA_MODELS_DIR).",
+    )
+    parser.add_argument(
+        "--output",
+        default=os.environ.get("LLAMA_SWAP_CONFIG", str(default_llama_swap_config_path())),
+        help="Write output YAML to this path (use '-' for stdout).",
+    )
+    parser.add_argument(
+        "--template",
+        default=None,
+        help="Optional header template file (default: llama-swap.yaml.example next to this script).",
+    )
+    parser.add_argument(
+        "--ctx-size",
+        type=int,
+        default=2048,
+        help="Context size (default: 2048).",
+    )
+    parser.add_argument(
+        "--flash-attn",
+        type=parse_flash_attn,
+        default="on",
+        help="Flash attention mode: on, off, auto (default: on).",
+    )
+    parser.add_argument(
+        "--cache-type-k",
+        default="q8_0",
+        help="KV cache K quantization type (default: q8_0).",
+    )
+    parser.add_argument(
+        "--cache-type-v",
+        default="q8_0",
+        help="KV cache V quantization type (default: q8_0).",
+    )
+    parser.add_argument(
+        "--n-gpu-layers",
+        type=parse_n_gpu_layers,
+        default=None,
+        help="Number of layers to offload to GPU (default: not passed unless set).",
+    )
+    parser.add_argument(
+        "--gpu-layer-autodetect",
+        action="store_true",
+        help="Auto-detect GPU layers from model metadata.",
+    )
+    parser.add_argument(
+        "--mmap",
+        dest="mmap",
+        action="store_true",
+        default=True,
+        help="Enable memory-mapped model loading (default).",
+    )
+    parser.add_argument(
+        "--no-mmap",
+        dest="mmap",
+        action="store_false",
+        help="Disable memory-mapped model loading.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=parse_batch_setting,
+        default=None,
+        help="Batch size (default: not passed unless set).",
+    )
+    parser.add_argument(
+        "--ubatch-size",
+        type=parse_batch_setting,
+        default=None,
+        help="Ubatch size (default: not passed unless set).",
+    )
+    parser.add_argument(
+        "--batch-size-autodetect",
+        action="store_true",
+        help="Auto-detect batch/ubatch size based on hardware and model.",
+    )
+    parser.add_argument(
+        "--allow-equal-batch",
+        action="store_true",
+        help="Allow batch size to equal ubatch size (for embeddings/reranking).",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print progress to stderr.",
+    )
+    parser.add_argument(
+        "--prune-missing",
+        action="store_true",
+        help="Remove model entries not present in the llama.cpp cache.",
+    )
+
+    args = parser.parse_args()
+    log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else (lambda _msg: None)
+
+    if (args.batch_size == BATCH_AUTO or args.ubatch_size == BATCH_AUTO) and not args.batch_size_autodetect:
+        print(
+            "ERROR: batch size 'auto' requires --batch-size-autodetect.",
+            file=sys.stderr,
+        )
+        return 2
+    if (args.batch_size is None) != (args.ubatch_size is None):
+        print("ERROR: --batch-size and --ubatch-size must be provided together.", file=sys.stderr)
+        return 2
+
+    log_dir = default_llama_cache_dir()
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"ERROR: unable to create log directory: {log_dir} ({exc})", file=sys.stderr)
+        return 2
+
+    hardware_profile = None
+    batch_arg = args.batch_size
+    ubatch_arg = args.ubatch_size
+    if args.batch_size_autodetect:
+        if batch_arg is None and ubatch_arg is None:
+            batch_arg = BATCH_AUTO
+            ubatch_arg = BATCH_AUTO
+            log("Batch size autodetect enabled; using auto batch/ubatch.")
+        else:
+            log("Batch size autodetect enabled, but explicit batch/ubatch provided; skipping auto.")
+    else:
+        if batch_arg is None and ubatch_arg is None:
+            log("Batch/ubatch not provided; leaving llama-server defaults.")
+        else:
+            log("Using explicit batch/ubatch values; autodetect disabled.")
+
+    n_gpu_layers_arg = args.n_gpu_layers
+    if args.gpu_layer_autodetect:
+        if n_gpu_layers_arg is None:
+            log("GPU layer autodetect enabled; using GGUF block_count.")
+        else:
+            log("GPU layer autodetect enabled, but explicit n-gpu-layers provided; skipping auto.")
+    else:
+        if n_gpu_layers_arg is None:
+            log("n-gpu-layers not provided; leaving llama-server defaults.")
+        else:
+            log("Using explicit n-gpu-layers; autodetect disabled.")
+
+    models_dir = Path(args.models_dir).expanduser()
+    if not models_dir.is_dir():
+        print(f"ERROR: models directory not found: {models_dir}", file=sys.stderr)
+        return 2
+
+    log(f"Scanning for .gguf models under: {models_dir}")
+    ggufs = sorted(p for p in models_dir.rglob("*.gguf") if p.is_file())
+    if not ggufs:
+        print(f"ERROR: no .gguf files found under: {models_dir}", file=sys.stderr)
+        return 3
+    log(f"Found {len(ggufs)} .gguf model(s).")
+
+    template_path = Path(args.template).expanduser() if args.template else Path(__file__).with_name("llama-swap.yaml.example")
+    header_lines = read_header(template_path)
+    if template_path.is_file():
+        log(f"Using template header from: {template_path}")
+    else:
+        log("Template header not found; using minimal header.")
+
+    used_names = {}
+    entry_blocks: List[tuple[str, List[str]]] = []
+    for model_path in ggufs:
+        base_name = model_path.stem
+        count = used_names.get(base_name, 0) + 1
+        used_names[base_name] = count
+        name = base_name if count == 1 else f"{base_name}-{count}"
+        log_file = log_dir / f"llama-swap-{sanitize_log_stem(name)}.log"
+        log(f"Log file for '{name}': {log_file}")
+
+        n_gpu_layers = n_gpu_layers_arg
+        if n_gpu_layers is None and args.gpu_layer_autodetect:
+            block_count = read_gguf_block_count(model_path)
+            if block_count:
+                n_gpu_layers = str(block_count + 1)
+                log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers} (block_count + 1)")
+            else:
+                n_gpu_layers = DEFAULT_N_GPU_LAYERS
+                log(f"Could not read block_count for '{name}'; using n-gpu-layers={n_gpu_layers}.")
+        if n_gpu_layers is not None:
+            log(f"Using n-gpu-layers for '{name}': {n_gpu_layers}")
+
+        batch_size = None
+        ubatch_size = None
+        if batch_arg is not None and ubatch_arg is not None:
+            if batch_arg == BATCH_AUTO or ubatch_arg == BATCH_AUTO:
+                if hardware_profile is None:
+                    hardware_profile = detect_hardware_profile(log)
+                    vram_info = f", {hardware_profile.vram_gb:.1f} GB VRAM" if hardware_profile.vram_gb else ""
+                    log(f"Auto batch profile: {hardware_profile.name}{vram_info}")
+            try:
+                batch_size, ubatch_size = resolve_batch_settings(
+                    batch_arg,
+                    ubatch_arg,
+                    args.allow_equal_batch,
+                    hardware_profile,
+                    model_path,
+                    log,
+                )
+            except ValueError as exc:
+                print(f"ERROR: {exc} for model '{name}'", file=sys.stderr)
+                return 2
+
+        thinking_optional = template_supports_thinking(model_path)
+        log(f"Adding model '{name}' (thinking optional: {'yes' if thinking_optional else 'no'}).")
+        if thinking_optional:
+            entry_blocks.append(
+                (
+                    name,
+                    [
+                        f"  {yaml_key(name)}:",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, False, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
+                    ],
+                )
+            )
+            entry_blocks.append(
+                (
+                    f"{name}-thinking",
+                    [
+                        f"  {yaml_key(name)}-thinking:",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, True, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
+                    ],
+                )
+            )
+        else:
+            entry_blocks.append(
+                (
+                    name,
+                    [
+                        f"  {yaml_key(name)}:",
+                        f"    cmd: {build_cmd(args.llama_server, model_path, None, args.ctx_size, args.flash_attn, args.cache_type_k, args.cache_type_v, n_gpu_layers, args.mmap, batch_size, ubatch_size, log_file)}",
+                    ],
+                )
+            )
+
+    entries: List[str] = []
+    for _name, block in entry_blocks:
+        entries.extend(block)
+        entries.append("")
+
+    output_lines = header_lines + [""] + entries
+    text = "\n".join(output_lines).rstrip() + "\n"
+
+    if args.output == "-":
+        sys.stdout.write(text)
+        log("Wrote config to stdout.")
+        return 0
+
+    out_path = Path(args.output).expanduser()
+    if out_path.exists():
+        existing_lines = out_path.read_text(encoding="utf-8").splitlines()
+        start, end = find_models_block(existing_lines)
+        if start is None:
+            if existing_lines and existing_lines[-1].strip():
+                existing_lines.append("")
+            existing_lines.append("models:")
+            start = len(existing_lines) - 1
+            end = len(existing_lines)
+
+        if start is not None and args.prune_missing:
+            entries_meta = parse_models_entries(existing_lines, start, end)
+            desired = {name for name, _block in entry_blocks}
+            keep = [True] * len(existing_lines)
+            removed = 0
+            for key, entry_start, entry_end in entries_meta:
+                if key in desired:
+                    continue
+                for idx in range(entry_start, entry_end):
+                    keep[idx] = False
+                removed += 1
+            if removed:
+                existing_lines = [line for idx, line in enumerate(existing_lines) if keep[idx]]
+                start, end = find_models_block(existing_lines)
+                log(f"Pruned {removed} missing model entr{'y' if removed == 1 else 'ies'}.")
+
+        start, end = find_models_block(existing_lines)
+        if start is None:
+            if existing_lines and existing_lines[-1].strip():
+                existing_lines.append("")
+            existing_lines.append("models:")
+            start = len(existing_lines) - 1
+            end = len(existing_lines)
+
+        existing = existing_model_keys(existing_lines, start, end)
+        lines_to_add: List[str] = []
+        added = 0
+        for entry_name, block in entry_blocks:
+            if entry_name in existing:
+                continue
+            if lines_to_add:
+                lines_to_add.append("")
+            lines_to_add.extend(block)
+            added += 1
+
+        if not lines_to_add:
+            log(f"No new entries to add; leaving config unchanged: {out_path}")
+            return 0
+
+        if end > start + 1 and existing_lines[end - 1].strip():
+            lines_to_add = [""] + lines_to_add
+        existing_lines[end:end] = lines_to_add
+        new_text = "\n".join(existing_lines).rstrip() + "\n"
+        out_path.write_text(new_text, encoding="utf-8")
+        log(f"Updated config at: {out_path} (added {added} entr{'y' if added == 1 else 'ies'}).")
+    else:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(text, encoding="utf-8")
+        log(f"Wrote new config to: {out_path}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
