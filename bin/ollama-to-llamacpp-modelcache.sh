@@ -139,6 +139,16 @@ created=0
 skipped=0
 errors=0
 
+
+# First remove any symbolic links to missing files
+for file in "$DEST_DIR"/* ; do
+    [ "${DEST_DIR##*/}" = '*' ] && continue
+    if [ ! -e "$file" ] ; then
+        info "Found symlink '$file' whose destination does not exist; removing symlink"
+        rm -f "$file"
+    fi
+done
+
 # Manifests live at: manifests/<registry>/<namespace>/<model>/<tag>
 # e.g.:  manifests/registry.ollama.ai/library/llama3/latest
 #         manifests/registry.ollama.ai/username/mymodel/q4_k_m
