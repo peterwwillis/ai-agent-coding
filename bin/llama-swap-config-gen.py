@@ -751,8 +751,8 @@ def main() -> int:
         if n_gpu_layers is None and args.gpu_layer_autodetect:
             block_count = read_gguf_block_count(model_path)
             if block_count:
-                n_gpu_layers = str(block_count)
-                log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers}")
+                n_gpu_layers = str(block_count + 1)
+                log(f"Auto n-gpu-layers for '{name}': {n_gpu_layers} (block_count + 1)")
             else:
                 n_gpu_layers = DEFAULT_N_GPU_LAYERS
                 log(
