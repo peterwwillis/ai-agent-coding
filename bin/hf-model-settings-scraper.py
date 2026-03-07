@@ -272,6 +272,8 @@ def _extract_sampling_from_card(model_card: str) -> Dict[str, Any]:
         return {}
 
     # Map max_tokens / max_new_tokens to suggested_out_t
+    # Only record if large enough to be a real recommendation (not a trivial example)
+    _MIN_SUGGESTED_OUT_T = 1024
     out: Dict[str, Any] = {}
     for key in _SAMPLING_KEYS:
         if key in best:
@@ -284,7 +286,9 @@ def _extract_sampling_from_card(model_card: str) -> Dict[str, Any]:
 
     for tok_key in ("max_tokens", "max_new_tokens"):
         if tok_key in best and "suggested_out_t" not in out:
-            out["suggested_out_t"] = int(best[tok_key])
+            val = int(best[tok_key])
+            if val >= _MIN_SUGGESTED_OUT_T:
+                out["suggested_out_t"] = val
 
     return out
 
@@ -319,17 +323,68 @@ def _extract_base_model(front_matter: Dict[str, Any]) -> Optional[str]:
 def _extract_sources_from_card(
     model_card: str, primary_url: str
 ) -> List[str]:
-    """Extract HuggingFace and documentation links from the model card body."""
+    """Extract HuggingFace and documentation links from the model card body.
+
+    Keeps only meaningful model or documentation pages; skips CDN/image/file/
+    dataset/collection/paper sub-paths that clutter the sources list.
+    """
     seen = {primary_url}
     sources = [primary_url]
 
+    # Patterns that indicate a URL is a raw file, image, or non-doc asset
+    _SKIP_PATH_RE = re.compile(
+        r"/(?:resolve|blob|tree|raw)/|"
+        r"[#]|"  # strip URLs with fragment anchors
+        r"\.(?:png|jpg|jpeg|gif|svg|webp|ico|pdf|zip|tar|gz|gguf|bin|safetensors)(?:[?#]|$)",
+        re.IGNORECASE,
+    )
+
+    # Keywords that are never valid as the first or second path segment on huggingface.co
+    _HF_SKIP_SEGMENTS = frozenset(
+        ["datasets", "collections", "papers", "spaces", "organizations", "joins", "join"]
+    )
+
+    # Documentation host patterns (exact match)
+    _DOC_HOSTS = re.compile(
+        r"^(?:huggingface\.co|hf\.co|"
+        r"qwen\.readthedocs\.io|"
+        r"docs\.mistral\.ai|"
+        r"unsloth\.ai|"
+        r"[a-z0-9-]+\.readthedocs\.io|"
+        r"platform\.openai\.com)$"
+    )
+
+    _HF_HOSTS = re.compile(r"^(?:huggingface\.co|hf\.co)$")
+
     for url in re.findall(
-        r"https?://(?:huggingface\.co|hf\.co|qwen\.readthedocs\.io|"
-        r"docs\.mistral\.ai|platform\.openai\.com|[a-z]+\.readthedocs\.io)"
-        r"/[^\s\"'<>)]*",
+        r"https?://[^\s\"'<>)\]]+",
         model_card,
     ):
         url = url.rstrip(".,;:)")
+        # Parse host and path
+        m = re.match(r"https?://([^/]+)(.*)", url)
+        if not m:
+            continue
+        host, path = m.group(1).lower(), m.group(2)
+        if not _DOC_HOSTS.match(host):
+            continue
+        if _SKIP_PATH_RE.search(path):
+            continue
+
+        # For HuggingFace, enforce that path has exactly owner/model (2 segments)
+        # or is under /docs/. Single-segment paths are organization pages; skip them.
+        if _HF_HOSTS.match(host):
+            segments = [s for s in path.strip("/").split("/") if s]
+            if len(segments) < 2:
+                continue  # org-only page like huggingface.co/nvidia
+            # Skip if either the first or second segment is a non-model keyword
+            if segments[0].lower() in _HF_SKIP_SEGMENTS:
+                continue  # e.g. huggingface.co/datasets/foo, huggingface.co/papers/123
+            if segments[1].lower() in _HF_SKIP_SEGMENTS:
+                continue  # e.g. huggingface.co/hotpot_qa/datasets
+            if len(segments) > 2 and segments[0] != "docs":
+                continue  # too deep and not a /docs/ path
+
         if url not in seen:
             seen.add(url)
             sources.append(url)
@@ -337,6 +392,15 @@ def _extract_sources_from_card(
             break
 
     return sources
+
+
+def _clean_note_text(text: str) -> str:
+    """Strip markdown blockquote and GitHub-flavored callout syntax from a single line."""
+    # Remove leading `> ` blockquote markers (possibly multiple levels)
+    text = re.sub(r"^(\s*>\s*)+", "", text)
+    # Remove GitHub-flavored callout tags like [!IMPORTANT], [!NOTE], [!TIP]
+    text = re.sub(r"\[!\w+\]\s*", "", text)
+    return text.strip()
 
 
 def _extract_notes_from_card(model_card: str) -> str:
@@ -360,14 +424,14 @@ def _extract_notes_from_card(model_card: str) -> str:
         end = headings[i + 1].start() if i + 1 < len(headings) else len(model_card)
         section_text = model_card[start:end].strip()
 
-        # Take first non-empty, non-code paragraph
+        # Take first non-empty, non-code paragraph; clean blockquotes per line
         para_lines: List[str] = []
         for line in section_text.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("```"):
+            cleaned = _clean_note_text(line)
+            if cleaned.startswith("```"):
                 break
-            if stripped:
-                para_lines.append(stripped)
+            if cleaned:
+                para_lines.append(cleaned)
             elif para_lines:
                 break
 
