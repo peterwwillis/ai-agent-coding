@@ -1,90 +1,60 @@
+# This file documents recommended settings for common LLM models.
+#
+# To render this YAML fully, run: 
+#   yq 'explode(.)' model-settings.yml
+#
+
+# Default thinking mode to false. Re-enable per-model mode.
+thinking: false
+
 models:
 
-  hf.co/unsloth/Qwen3.5-9B-GGUF:UD-Q4_K_XL:
+  ######################################################################
+  # Define some "macros" for common model families
+  #
+  Qwen3.5: &Qwen3.5
+    capabilities: [ thinking, text, vision, moe ]
     modes:
-      thinking:
-        temperature: 0.6
+      thinking-code: &Qwen_3.5_think
+        thinking: true
+        temp: 0.6
         top_p: 0.95
         top_k: 20
         min_p: 0.0
         presence_penalty: 1.5
         repetition_penalty: 1.0
-      non_thinking:
-        temperature: 0.7
-        top_p: 0.8
-        top_k: 20
-        min_p: 0.0
-        presence_penalty: 0.0
-        repetition_penalty: 1.0
-    sources:
-      - https://unsloth.ai/docs/models/qwen3.5
-      - https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF/discussions/10
-    notes: Unsloth Qwen3.5 docs define thinking vs non-thinking settings.
-
-  hf.co/unsloth/Qwen3.5-4B-GGUF:UD-Q4_K_XL:
-    modes:
-      thinking:
-        temperature: 0.6
+      thinking-general: &Qwen_3.5_think_general
+        thinking: true
+        temp: 1.0
         top_p: 0.95
         top_k: 20
         min_p: 0.0
         presence_penalty: 1.5
         repetition_penalty: 1.0
-      non_thinking:
-        temperature: 0.7
+      instruct-general: &Qwen_3.5_instruct_general
+        temp: 0.7
         top_p: 0.8
         top_k: 20
         min_p: 0.0
         presence_penalty: 0.0
         repetition_penalty: 1.0
-    sources:
-      - https://unsloth.ai/docs/models/qwen3.5
-      - https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF/discussions/10
-
-  hf.co/unsloth/Qwen3.5-35B-A3B-GGUF:UD-Q4_K_XL:
-    modes:
-      thinking:
-        temperature: 0.6
+      instruct-reasoning: &Qwen_3.5_instruct_reason
+        temp: 1.0
         top_p: 0.95
         top_k: 20
         min_p: 0.0
         presence_penalty: 1.5
         repetition_penalty: 1.0
-      non_thinking:
-        temperature: 0.7
-        top_p: 0.8
-        top_k: 20
-        min_p: 0.0
-        presence_penalty: 0.0
-        repetition_penalty: 1.0
     sources:
       - https://unsloth.ai/docs/models/qwen3.5
       - https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF/discussions/10
 
-  hf.co/unsloth/Qwen3.5-27B-GGUF:UD-Q4_K_XL:
+  Qwen3: &Qwen3
+    capabilities: [ thinking, text ]
     modes:
-      thinking:
-        temperature: 0.6
-        top_p: 0.95
-        top_k: 20
-        min_p: 0.0
-        presence_penalty: 1.5
-        repetition_penalty: 1.0
-      non_thinking:
-        temperature: 0.7
-        top_p: 0.8
-        top_k: 20
-        min_p: 0.0
-        presence_penalty: 0.0
-        repetition_penalty: 1.0
-    sources:
-      - https://unsloth.ai/docs/models/qwen3.5
-      - https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF/discussions/10
-
-  hf.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF:UD-Q4_K_XL:
-    modes:
-      thinking:
-        temperature: 0.6
+      thinking: &Qwen_3_think
+        thinking: true
+        temp: 0.6
         top_p: 0.95
         top_k: 20
         min_p: 0
@@ -92,99 +62,147 @@ models:
         repetition_penalty: 1.0
         suggested_out_t: 32768
         suggested_complex_out_t: 81920
+        suggested_ctx: 131072
         max_ctx: 262144
     sources:
-      - https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF
       - https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html
       - https://huggingface.co/Qwen/Qwen3-0.6B
 
-  hf.co/unsloth/Qwen3-4B-Thinking-2507-GGUF:UD-Q4_K_XL:
-    settings:
-      temperature: 0.6
-      top_p: 0.95
-      top_k: 20
-      presence_penalty: 1.5
-      repetition_penalty: 1.0
-    sources:
-      - https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html
-      - https://huggingface.co/Qwen/Qwen3-0.6B
-
-  hf.co/unsloth/Qwen3-Coder-Next-GGUF:UD-Q2_K_XL:
-    settings:
-      temperature: 1.0
-      top_p: 0.95
-      top_k: 40
-      repetition_penalty: null
+  Qwen3-Coder-Next: &Qwen_3_Coder_Next
+    modes:
+      general:
+        temp: 1.0
+        top_p: 0.95
+        top_k: 40
+        repetition_penalty: null
     sources:
       - https://huggingface.co/Qwen/Qwen3-Coder-Next-Base
       - https://unsloth.ai/docs/models/qwen3-coder-next
 
-  hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_M:
-    settings:
-      temperature: 0.7
-      top_p: 0.8
-      top_k: 20
-      repetition_penalty: 1.05
+  Qwen3-Coder: &Qwen_3_Coder
+    modes:
+      instruct:
+        temp: 0.7
+        top_p: 0.8
+        top_k: 20
+        repetition_penalty: 1.05
     sources:
       - https://huggingface.co/Qwen/Qwen3-Coder-480B-A35B-Instruct
 
-  hf.co/fluently-lm/FluentlyLM-Prinum-Q4_K_M-GGUF:latest:
-    settings:
-      temperature: 0.7
-      top_p: 0.8
-      top_k: 20
-      repetition_penalty: 1.0
+  Phi-4: &Phi_4
+    modes:
+      reasoning:
+        temp: 0.8
+        top_p: 0.95
+        top_k: 50
+        do_sample: true
+    sources:
+      - https://huggingface.co/microsoft/Phi-4-mini-reasoning
+      - https://huggingface.co/microsoft/Phi-4-reasoning-plus
+
+  #################################################################################
+  # Now the normal models
+  #
+  #
+  hf.co/unsloth/Qwen3.5-9B-GGUF:
+    <<: *Qwen3.5
+    notes: Unsloth Qwen3.5 docs define thinking vs non-thinking settings.
+
+  hf.co/unsloth/Qwen3.5-4B-GGUF:
+    <<: *Qwen3.5
+
+  hf.co/unsloth/Qwen3.5-2B-GGUF:
+    <<: *Qwen3.5
+    notes: |
+      Docs note that for 2B model, in thinking mode, recommended sampling parameters are 
+      more prone to thinking loops compared to other Qwen3.5 models, preventing terminating
+      properly. Recommend further tuning specific to use case and utilizing streaming mode
+      (if supported) to detect and interrupt loops.
+
+
+  hf.co/unsloth/Qwen3.5-35B-A3B-GGUF:
+    <<: *Qwen3.5
+  
+    notes: Documentation suggests different settings for coding and general tasks, thinking and instruct.
+
+
+  hf.co/unsloth/Qwen3.5-27B-GGUF:
+    <<: *Qwen3.5
+
+  hf.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF:
+    modes:
+      thinking:
+        <<: *Qwen_3_think
+    sources:
+      - https://huggingface.co/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF
+      - https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html
+      - https://huggingface.co/Qwen/Qwen3-0.6B
+    notes: |
+      Docs suggest standardizing the output format.
+      For multi-turn conversations, remove thinking part of output.
+
+
+  hf.co/unsloth/Qwen3-4B-Thinking-2507-GGUF:
+    modes:
+      thinking:
+        <<: *Qwen_3_think
+    sources:
+      - https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html
+      - https://huggingface.co/Qwen/Qwen3-0.6B
+    notes: |
+      Qwen3-4B-Thinking-2507 is text-only, and is better at deep reasoning and math tasks
+      than Qwen3.5-4B (which is for more general tasks), but may be slower due to thinking.
+      Docs suggest standardizing the output format.
+      For multi-turn conversations, remove thinking part of output.
+
+  hf.co/unsloth/Qwen3-Coder-Next-GGUF:
+    <<: *Qwen_3_Coder_Next
+
+  hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:
+    <<: *Qwen_3_Coder
+
+  hf.co/fluently-lm/FluentlyLM-Prinum-Q4_K_M-GGUF:
+    modes:
+      general:
+        temp: 0.7
+        top_p: 0.8
+        top_k: 20
+        repetition_penalty: 1.0
     sources:
       - https://huggingface.co/fluently-lm/FluentlyLM-Prinum
       - https://huggingface.co/fluently-lm/FluentlyLM-Prinum-Q4_K_M-GGUF
       - https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html
     notes: FluentlyLM-Prinum model card does not specify sampling params; using official Qwen defaults since base model is Qwen2.5.
 
-  gemma-3-27b-smallcontext:latest:
-    settings:
-      temperature: 1.0
-      top_p: 0.95
-      top_k: 64
+  hf.co/unsloth/gemma-3-27b-it-qat-GGUF:
+    modes:
+      general:
+        temp: 1.0
+        top_p: 0.95
+        top_k: 64
     sources:
       - https://huggingface.co/google/gemma-3-12b-it/discussions/25
       - https://huggingface.co/google/gemma-3-27b-it/tree/main
 
-  hf.co/unsloth/gemma-3-27b-it-qat-GGUF:UD-Q4_K_XL:
-    settings:
-      temperature: 1.0
-      top_p: 0.95
-      top_k: 64
-    sources:
-      - https://huggingface.co/google/gemma-3-12b-it/discussions/25
-      - https://huggingface.co/google/gemma-3-27b-it/tree/main
-
-  hf.co/unsloth/gemma-3-27b-it-qat-GGUF:UD-Q3_K_XL:
-    settings:
-      temperature: 1.0
-      top_p: 0.95
-      top_k: 64
-    sources:
-      - https://huggingface.co/google/gemma-3-12b-it/discussions/25
-      - https://huggingface.co/google/gemma-3-27b-it/tree/main
-
-  gemma2:2b:
-    settings:
-      temperature: 1.0
-      top_p: 0.95
-      top_k: 64
+  gemma2:
+    modes:
+      general:
+        temp: 1.0
+        top_p: 0.95
+        top_k: 64
     sources:
       - https://huggingface.co/google/gemma-2-2b-it/discussions/73
       - https://huggingface.co/google/gemma-2-2b
 
-  hf.co/unsloth/Nemotron-3-Nano-30B-A3B-GGUF:UD-Q3_K_XL:
+  hf.co/unsloth/Nemotron-3-Nano-30B-A3B-GGUF:
     modes:
       general:
-        temperature: 1.0
+        temp: 1.0
         top_p: 1.0
         top_k: 20
         repetition_penalty: 1.1
       tool_calling:
-        temperature: 0.6
+        temp: 0.6
         top_p: 0.95
         top_k: 20
         repetition_penalty: 1.1
@@ -192,65 +210,55 @@ models:
       - https://unsloth.ai/docs/models/tutorials/nemotron-3
       - https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
 
-  hf.co/unsloth/Ministral-3-14B-Reasoning-2512-GGUF:UD-Q4_K_XL:
-    settings:
-      temperature: 0.7
-      top_p: 0.95
-      top_k: null
+  hf.co/unsloth/Ministral-3-14B-Reasoning-2512-GGUF:
+    modes:
+      reasoning:
+        temp: 0.7
+        top_p: 0.95
+        top_k: null
     sources:
       - https://unsloth.ai/docs/models/tutorials/ministral-3
       - https://huggingface.co/mistralai/Ministral-3-14B-Reasoning-2512
     notes: Official docs specify temperature/top_p; top_k not specified.
 
-  hf.co/unsloth/Ministral-3-14B-Instruct-2512-GGUF:UD-Q4_K_XL:
-    settings:
-      temperature: 0.1
-      top_p: null
-      top_k: null
+  hf.co/unsloth/Ministral-3-14B-Instruct-2512-GGUF:
+    modes:
+      instruct:
+        temp: 0.1
+        top_p: null
+        top_k: null
     sources:
       - https://unsloth.ai/docs/models/tutorials/ministral-3
       - https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512
     notes: Official docs emphasize low temperature (<0.1); top_p/top_k not specified.
 
-  hf.co/unsloth/Phi-4-mini-reasoning-GGUF:UD-Q4_K_XL:
-    settings:
-      temperature: 0.8
-      top_p: 0.95
-      top_k: 50
-      do_sample: true
-    sources:
-      - https://huggingface.co/microsoft/Phi-4-mini-reasoning
-      - https://huggingface.co/microsoft/Phi-4-reasoning-plus
+  hf.co/unsloth/Phi-4-mini-reasoning-GGUF:
+    <<: *Phi_4
     notes: Phi-4-mini-reasoning card does not list params; using official Phi-4-reasoning-plus recommended settings.
 
-  hf.co/unsloth/Phi-4-reasoning-plus-GGUF:UD-Q4_K_XL:
-    settings:
-      temperature: 0.8
-      top_p: 0.95
-      top_k: 50
-      do_sample: true
-    sources:
-      - https://huggingface.co/microsoft/Phi-4-reasoning-plus
+  hf.co/unsloth/Phi-4-reasoning-plus-GGUF:
+    <<: *Phi_4
 
-  phi3.5:latest:
-    settings:
-      temperature: 0.7
-      top_p: 0.85
-      top_k: 40
-      repetition_penalty: 1.1
-      do_sample: true
+  phi3.5:
+    modes:
+      general:
+        temp: 0.7
+        top_p: 0.85
+        top_k: 40
+        repetition_penalty: 1.1
+        do_sample: true
     sources:
       - https://huggingface.co/microsoft/Phi-3.5-mini-instruct
 
-  hf.co/unsloth/GLM-4.7-Flash-GGUF:latest:
+  hf.co/unsloth/GLM-4.7-Flash-GGUF:
     modes:
       general:
-        temperature: 1.0
+        temp: 1.0
         top_p: 0.95
         top_k: null
         repetition_penalty: 1.0
       tool_calling:
-        temperature: 0.7
+        temp: 0.7
         top_p: 1.0
         top_k: null
         repetition_penalty: 1.0
@@ -260,32 +268,35 @@ models:
       - https://huggingface.co/zai-org/GLM-4.7-Flash/discussions/6
     notes: HF generation_config sets temperature=1.0; top_k not specified.
 
-  qwen2.5:1.5b:
-    settings:
-      temperature: 0.7
-      top_p: 0.8
-      top_k: 20
-      repetition_penalty: 1.0
+  qwen2.5:
+    modes:
+      general:
+        temp: 0.7
+        top_p: 0.8
+        top_k: 20
+        repetition_penalty: 1.0
     sources:
       - https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html
       - https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct
 
-  hf.co/unsloth/Qwen2.5-Coder-7B-Instruct-GGUF:Q4_K_M:
-    settings:
-      temperature: 0.2
-      top_p: 0.9
-      top_k: 50
+  hf.co/unsloth/Qwen2.5-Coder-7B-Instruct-GGUF:
+    modes:
+      general:
+        temp: 0.2
+        top_p: 0.9
+        top_k: 50
     sources:
       - https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct
       - https://discuss.huggingface.co/t/qwen-2-5-coder-7b-best-inference-hyperparameters/129008
     notes: HF model card does not fix params; HF discussion suggests low temperature for deterministic code.
 
-  llama3.2:latest:
-    settings:
-      temperature: 0.2
-      top_p: 1.0
-      top_k: 50
-      do_sample: false
+  llama3.2:
+    modes:
+      general:
+        temp: 0.2
+        top_p: 1.0
+        top_k: 50
+        do_sample: false
     sources:
       - https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct
       - https://github.com/huggingface/huggingface-llama-recipes

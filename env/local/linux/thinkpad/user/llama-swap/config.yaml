@@ -1,0 +1,740 @@
+logToStdout: both
+
+globalTTL: 300
+
+models:
+  LiquidAI_LFM2-24B-A2B-GGUF_Q5_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-LiquidAI_LFM2-24B-A2B-GGUF_Q5_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/LiquidAI_LFM2-24B-A2B-GGUF_Q5_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  MaziyarPanahi_HELVETE-X-GGUF_Q5_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-MaziyarPanahi_HELVETE-X-GGUF_Q5_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/MaziyarPanahi_HELVETE-X-GGUF_Q5_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  ai21labs_AI21-Jamba-Reasoning-3B-GGUF_Q4_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-ai21labs_AI21-Jamba-Reasoning-3B-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/ai21labs_AI21-Jamba-Reasoning-3B-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  bartowski_ai21labs_AI21-Jamba2-3B-GGUF_latest:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-bartowski_ai21labs_AI21-Jamba2-3B-GGUF_latest.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/bartowski_ai21labs_AI21-Jamba2-3B-GGUF_latest.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  bartowski_janhq_Jan-code-4b-GGUF_Q5_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-bartowski_janhq_Jan-code-4b-GGUF_Q5_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/bartowski_janhq_Jan-code-4b-GGUF_Q5_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  fluently-lm_FluentlyLM-Prinum-Q4_K_M-GGUF_latest:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-fluently-lm_FluentlyLM-Prinum-Q4_K_M-GGUF_latest.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/fluently-lm_FluentlyLM-Prinum-Q4_K_M-GGUF_latest.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  library_gemma-3-27b-smallcontext_latest:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-library_gemma-3-27b-smallcontext_latest.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/library_gemma-3-27b-smallcontext_latest.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  library_gemma2_2b:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-library_gemma2_2b.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/library_gemma2_2b.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  library_llama3.2_latest:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-library_llama3.2_latest.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/library_llama3.2_latest.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  library_phi3.5_latest:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-library_phi3.5_latest.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/library_phi3.5_latest.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  library_qwen2.5_1.5b:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-library_qwen2.5_1.5b.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/library_qwen2.5_1.5b.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  mradermacher_DAN-L3-R1-8B-i1-GGUF_Q5_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_DAN-L3-R1-8B-i1-GGUF_Q5_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_DAN-L3-R1-8B-i1-GGUF_Q5_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  mradermacher_DeepSWE-Preview-i1-GGUF_Q4_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_DeepSWE-Preview-i1-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_DeepSWE-Preview-i1-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  mradermacher_DeepSWE-Preview-i1-GGUF_Q4_K_M-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_DeepSWE-Preview-i1-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_DeepSWE-Preview-i1-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  mradermacher_GLM-4.7-Flash-heretic-i1-GGUF_Q4_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_GLM-4.7-Flash-heretic-i1-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_GLM-4.7-Flash-heretic-i1-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  mradermacher_GLM-4.7-Flash-heretic-i1-GGUF_Q4_K_M-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_GLM-4.7-Flash-heretic-i1-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_GLM-4.7-Flash-heretic-i1-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  mradermacher_Heretical-Qwen3.5-9B-GGUF_Q5_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_Heretical-Qwen3.5-9B-GGUF_Q5_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_Heretical-Qwen3.5-9B-GGUF_Q5_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  mradermacher_Heretical-Qwen3.5-9B-GGUF_Q5_K_M-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_Heretical-Qwen3.5-9B-GGUF_Q5_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_Heretical-Qwen3.5-9B-GGUF_Q5_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  mradermacher_LFM2-8B-A1B-absolute-heresy-MPOA-i1-GGUF_Q4_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_LFM2-8B-A1B-absolute-heresy-MPOA-i1-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_LFM2-8B-A1B-absolute-heresy-MPOA-i1-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  mradermacher_LFM2.5-1.2B-Instruct-Heretic-i1-GGUF_Q6_K:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_LFM2.5-1.2B-Instruct-Heretic-i1-GGUF_Q6_K.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_LFM2.5-1.2B-Instruct-Heretic-i1-GGUF_Q6_K.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  mradermacher_LFM2.5-1.2B-Thinking-Kimi-V2-Heretic-Uncensored-DISTILL-GGUF_Q6_K:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_LFM2.5-1.2B-Thinking-Kimi-V2-Heretic-Uncensored-DIS.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_LFM2.5-1.2B-Thinking-Kimi-V2-Heretic-Uncensored-DISTILL-GGUF_Q6_K.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  mradermacher_Llama-3.1-Nemotron-8B-UltraLong-1M-Instruct_Abliterated-i1-GGUF_Q4_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_Llama-3.1-Nemotron-8B-UltraLong-1M-Instruct_Abliter.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_Llama-3.1-Nemotron-8B-UltraLong-1M-Instruct_Abliterated-i1-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  mradermacher_Qwen3-4B-Sky-High-Hermes-gabliterated-i1-GGUF_Q5_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_Qwen3-4B-Sky-High-Hermes-gabliterated-i1-GGUF_Q5_K_.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_Qwen3-4B-Sky-High-Hermes-gabliterated-i1-GGUF_Q5_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  mradermacher_Qwen3-4B-Wrist-On-Hermes-GGUF_Q8_0:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_Qwen3-4B-Wrist-On-Hermes-GGUF_Q8_0.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_Qwen3-4B-Wrist-On-Hermes-GGUF_Q8_0.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  mradermacher_XORTRON.CriminalComputing.2026.27B-i1-GGUF_Q4_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_XORTRON.CriminalComputing.2026.27B-i1-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_XORTRON.CriminalComputing.2026.27B-i1-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  mradermacher_XORTRON.CriminalComputing.2026.27B-i1-GGUF_Q4_K_M-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-mradermacher_XORTRON.CriminalComputing.2026.27B-i1-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/mradermacher_XORTRON.CriminalComputing.2026.27B-i1-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  noctrex_Llama-3.3-8B-Instruct-128k-abliterated-GGUF_Q5_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-noctrex_Llama-3.3-8B-Instruct-128k-abliterated-GGUF_Q5_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/noctrex_Llama-3.3-8B-Instruct-128k-abliterated-GGUF_Q5_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Devstral-Small-2-24B-Instruct-2512-GGUF_UD-Q5_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Devstral-Small-2-24B-Instruct-2512-GGUF_UD-Q5_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Devstral-Small-2-24B-Instruct-2512-GGUF_UD-Q5_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Ministral-3-14B-Instruct-2512-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Ministral-3-14B-Instruct-2512-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Ministral-3-14B-Instruct-2512-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Ministral-3-14B-Reasoning-2512-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Ministral-3-14B-Reasoning-2512-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Ministral-3-14B-Reasoning-2512-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Nemotron-3-Nano-30B-A3B-GGUF_UD-Q3_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Nemotron-3-Nano-30B-A3B-GGUF_UD-Q3_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Nemotron-3-Nano-30B-A3B-GGUF_UD-Q3_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  unsloth_Nemotron-3-Nano-30B-A3B-GGUF_UD-Q3_K_XL-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Nemotron-3-Nano-30B-A3B-GGUF_UD-Q3_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Nemotron-3-Nano-30B-A3B-GGUF_UD-Q3_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  unsloth_Phi-4-mini-reasoning-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Phi-4-mini-reasoning-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Phi-4-mini-reasoning-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Phi-4-reasoning-plus-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Phi-4-reasoning-plus-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Phi-4-reasoning-plus-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Qwen2.5-Coder-7B-Instruct-GGUF_Q4_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen2.5-Coder-7B-Instruct-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen2.5-Coder-7B-Instruct-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Qwen3-30B-A3B-Thinking-2507-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3-30B-A3B-Thinking-2507-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3-30B-A3B-Thinking-2507-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Qwen3-32B-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3-32B-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3-32B-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  unsloth_Qwen3-32B-GGUF_UD-Q4_K_XL-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3-32B-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3-32B-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  unsloth_Qwen3-4B-Thinking-2507-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3-4B-Thinking-2507-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3-4B-Thinking-2507-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Qwen3-Coder-30B-A3B-Instruct-GGUF_Q4_K_M:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3-Coder-30B-A3B-Instruct-GGUF_Q4_K_M.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3-Coder-30B-A3B-Instruct-GGUF_Q4_K_M.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
+  unsloth_Qwen3.5-35B-A3B-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3.5-35B-A3B-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3.5-35B-A3B-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 16384 \
+        --batch-size 128 \
+        --ubatch-size 128 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --temp 0.7 \
+        --top-k 20 \
+        --top-p 0.8 \
+        --min-p 0.0 \
+        --presence-penalty 0.0 \
+        --repeat-penalty 1.0 \
+        --mmap \
+        --n-gpu-layers auto \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  unsloth_Qwen3.5-35B-A3B-GGUF_UD-Q4_K_XL-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3.5-35B-A3B-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3.5-35B-A3B-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 16384 \
+        --batch-size 128 \
+        --ubatch-size 128 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --n-gpu-layers auto \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  unsloth_Qwen3.5-4B-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3.5-4B-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3.5-4B-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  unsloth_Qwen3.5-4B-GGUF_UD-Q4_K_XL-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3.5-4B-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3.5-4B-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  unsloth_Qwen3.5-9B-GGUF_UD-Q4_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3.5-9B-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3.5-9B-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":false}' \
+        --port ${PORT}
+  unsloth_Qwen3.5-9B-GGUF_UD-Q4_K_XL-thinking:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_Qwen3.5-9B-GGUF_UD-Q4_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_Qwen3.5-9B-GGUF_UD-Q4_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --chat-template-kwargs '{"enable_thinking":true}' \
+        --port ${PORT}
+  unsloth_gemma-3-27b-it-qat-GGUF_UD-Q3_K_XL:
+    cmd: |
+      llama-server \
+        --offline \
+        --log-file /home/peterw/.cache/llama.cpp/llama-swap-unsloth_gemma-3-27b-it-qat-GGUF_UD-Q3_K_XL.log \
+        --log-colors off \
+        --log-prefix \
+        --log-timestamps \
+        -m /home/peterw/.cache/llama.cpp/unsloth_gemma-3-27b-it-qat-GGUF_UD-Q3_K_XL.gguf \
+        --ctx-size 2048 \
+        --cache-type-k q8_0 \
+        --cache-type-v q8_0 \
+        --flash-attn on \
+        --mmap \
+        --port ${PORT}
