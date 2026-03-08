@@ -1,0 +1,168 @@
+# Caddyfile – local reverse-proxy for AI services
+# =============================================================================
+# Hostname: adapt the site address below to match your machine's LAN hostname
+# or IP.  Examples:
+#   mac.local          – mDNS name on macOS (default shown here)
+#   myhost.local       – custom mDNS / Avahi hostname on Linux
+#   192.168.1.50       – static LAN IP (no hostname resolution needed)
+#
+# TLS: cert/key files are mounted at /etc/caddy/certs/ (see docker-compose.yml).
+#      Update the tls directive if you rename the files.
+#
+# Host reachability (upstream services on the Docker host):
+#   macOS / Docker Desktop: host.docker.internal  (set automatically)
+#   Linux: replace host.docker.internal below with your host's LAN IP,
+#          e.g. 192.168.1.50, or add extra_hosts to docker-compose.yml:
+#            extra_hosts:
+#              - "host.docker.internal:host-gateway"
+#
+# Service port defaults (adjust to match your local setup):
+#   Ollama           11434
+#   llama-swap        8080
+#   Open WebUI        3000
+#   n8n               5678
+#   ttyd (terminal)   7681
+#   code-server       8443
+#   SearXNG           8888
+#   llama.cpp RPC     8081
+#   noVNC (VNC)       6080
+#
+# Basic-auth password hash:
+#   Generate with: ../scripts/gen-bcrypt.sh mypassword
+#   Replace the placeholder hash below before exposing to the network.
+# =============================================================================
+
+# Change mac.local to your machine's hostname or IP
+mac.local {
+
+    # --------------------------------------------------------------------------
+    # Local TLS – serve the self-signed / CA-signed certificate
+    # --------------------------------------------------------------------------
+    tls /etc/caddy/certs/local.crt /etc/caddy/certs/local.key
+
+    # --------------------------------------------------------------------------
+    # Logging
+    # --------------------------------------------------------------------------
+    log {
+        output stderr
+        level  INFO
+    }
+
+    # --------------------------------------------------------------------------
+    # Basic-auth credentials (used by sensitive routes below)
+    # Generate hash: ../scripts/gen-bcrypt.sh mypassword
+    # IMPORTANT: Replace the placeholder hash before using in production.
+    # --------------------------------------------------------------------------
+    # We define the hash once and reference it in each route's basicauth block.
+    # Caddy uses bcrypt hashes in the format produced by `caddy hash-password`.
+    # The hash below is the Caddy-format bcrypt for the password "changeme".
+    # Replace with output of: docker run --rm caddy:2.9-alpine caddy hash-password --plaintext 'yourpassword'
+
+    # --------------------------------------------------------------------------
+    # /ollama – local Ollama inference server
+    # --------------------------------------------------------------------------
+    handle_path /ollama/* {
+        reverse_proxy host.docker.internal:11434 {
+            header_up Host {upstream_hostport}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # /llama-swap – llama.cpp model-swap proxy
+    # --------------------------------------------------------------------------
+    handle_path /llama-swap/* {
+        reverse_proxy host.docker.internal:8080 {
+            header_up Host {upstream_hostport}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # /openwebui – Open WebUI chat front-end
+    # --------------------------------------------------------------------------
+    handle_path /openwebui/* {
+        reverse_proxy host.docker.internal:3000 {
+            header_up Host {upstream_hostport}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # /n8n – workflow automation (PROTECTED)
+    # --------------------------------------------------------------------------
+    handle_path /n8n/* {
+        basicauth * {
+            # username: admin  |  replace hash below with real bcrypt hash
+            admin $2y$10$placeholder.replace.me.with.real.bcrypt.hash.ABC
+        }
+        reverse_proxy host.docker.internal:5678 {
+            header_up Host {upstream_hostport}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # /terminal – ttyd web terminal (PROTECTED, WebSocket-capable)
+    # --------------------------------------------------------------------------
+    handle_path /terminal/* {
+        basicauth * {
+            admin $2y$10$placeholder.replace.me.with.real.bcrypt.hash.ABC
+        }
+        reverse_proxy host.docker.internal:7681 {
+            header_up Host {upstream_hostport}
+            # Enable WebSocket proxying
+            header_up Connection {http.request.header.Connection}
+            header_up Upgrade   {http.request.header.Upgrade}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # /code – code-server (browser VS Code) (PROTECTED, WebSocket-capable)
+    # --------------------------------------------------------------------------
+    handle_path /code/* {
+        basicauth * {
+            admin $2y$10$placeholder.replace.me.with.real.bcrypt.hash.ABC
+        }
+        reverse_proxy host.docker.internal:8443 {
+            header_up Host {upstream_hostport}
+            header_up Connection {http.request.header.Connection}
+            header_up Upgrade   {http.request.header.Upgrade}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # /searxng – SearXNG local meta-search engine
+    # --------------------------------------------------------------------------
+    handle_path /searxng/* {
+        reverse_proxy host.docker.internal:8888 {
+            header_up Host {upstream_hostport}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # /llamacpp-rpc – llama.cpp RPC frontend/aggregator
+    # --------------------------------------------------------------------------
+    handle_path /llamacpp-rpc/* {
+        reverse_proxy host.docker.internal:8081 {
+            header_up Host {upstream_hostport}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # /vnc – noVNC web VNC client (PROTECTED, WebSocket-capable)
+    # --------------------------------------------------------------------------
+    handle_path /vnc/* {
+        basicauth * {
+            admin $2y$10$placeholder.replace.me.with.real.bcrypt.hash.ABC
+        }
+        reverse_proxy host.docker.internal:6080 {
+            header_up Host {upstream_hostport}
+            header_up Connection {http.request.header.Connection}
+            header_up Upgrade   {http.request.header.Upgrade}
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # Default: 404 for unmatched paths
+    # --------------------------------------------------------------------------
+    handle {
+        respond "Not found" 404
+    }
+}

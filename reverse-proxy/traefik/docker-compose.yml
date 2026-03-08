@@ -1,0 +1,43 @@
+# Traefik reverse-proxy stack for local AI services
+# Usage: docker compose up -d
+#
+# Place TLS cert/key files in ./certs/ before starting:
+#   certs/local.crt
+#   certs/local.key
+# See ../scripts/gen-certs.sh to generate them.
+
+services:
+  traefik:
+    image: traefik:v3.3
+    restart: unless-stopped
+    ports:
+      # HTTPS entrypoint
+      - "443:443"
+      # Traefik dashboard (comment out or restrict in production)
+      - "127.0.0.1:8080:8080"
+    command:
+      # Enable the Traefik dashboard (disable in production)
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      # Log level: DEBUG | INFO | WARN | ERROR
+      - "--log.level=INFO"
+      # Define the HTTPS entrypoint
+      - "--entrypoints.websecure.address=:443"
+      # Enable the file provider for dynamic configuration
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      # Disable automatic TLS certificate resolution (we use local certs)
+      - "--entrypoints.websecure.http.tls=true"
+    volumes:
+      # Dynamic config files (routes, middlewares, TLS)
+      - ./dynamic:/etc/traefik/dynamic:ro
+      # Local TLS certificates
+      - ./certs:/etc/traefik/certs:ro
+      # Docker socket (not needed when using file provider only)
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    driver: bridge

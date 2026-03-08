@@ -1,0 +1,109 @@
+# Traefik middleware definitions
+# These are referenced by name in routes.yml.
+
+http:
+  middlewares:
+
+    # -------------------------------------------------------------------------
+    # Basic Authentication
+    # -------------------------------------------------------------------------
+    # Generate a bcrypt hash with:  ../scripts/gen-bcrypt.sh mypassword
+    # The format is:  username:$$2y$$...hash... (dollar signs doubled for YAML)
+    #
+    # IMPORTANT: Replace the placeholder hash below with a real bcrypt hash
+    #            before exposing any protected route to the network.
+    basic-auth:
+      basicAuth:
+        users:
+          # Placeholder – username: admin, password: changeme
+          # Replace with output of: ../scripts/gen-bcrypt.sh changeme
+          - "admin:$$2y$$10$$placeholder.replace.me.with.real.bcrypt.hash.XYZ"
+        realm: "Local AI Services"
+        # Remove HTTP Authorization header before forwarding to upstream
+        removeHeader: true
+
+    # -------------------------------------------------------------------------
+    # Strip-prefix middlewares
+    # Each service has its own strip-prefix so the upstream receives only the
+    # path that follows the prefix, e.g. /ollama/api/... -> /api/...
+    # -------------------------------------------------------------------------
+    strip-ollama:
+      stripPrefix:
+        prefixes:
+          - "/ollama"
+
+    strip-llama-swap:
+      stripPrefix:
+        prefixes:
+          - "/llama-swap"
+
+    strip-openwebui:
+      stripPrefix:
+        prefixes:
+          - "/openwebui"
+
+    strip-n8n:
+      stripPrefix:
+        prefixes:
+          - "/n8n"
+
+    strip-terminal:
+      stripPrefix:
+        prefixes:
+          - "/terminal"
+
+    strip-code:
+      stripPrefix:
+        prefixes:
+          - "/code"
+
+    strip-searxng:
+      stripPrefix:
+        prefixes:
+          - "/searxng"
+
+    strip-llamacpp-rpc:
+      stripPrefix:
+        prefixes:
+          - "/llamacpp-rpc"
+
+    strip-vnc:
+      stripPrefix:
+        prefixes:
+          - "/vnc"
+
+    # -------------------------------------------------------------------------
+    # Secure headers – applied globally or per-route
+    # -------------------------------------------------------------------------
+    secure-headers:
+      headers:
+        sslRedirect: false            # already on HTTPS
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+    # -------------------------------------------------------------------------
+    # Protected chain – use for sensitive services (n8n, terminal, code, vnc)
+    # Combines basic-auth + secure-headers into one named middleware chain.
+    # -------------------------------------------------------------------------
+    protected:
+      chain:
+        middlewares:
+          - basic-auth
+          - secure-headers
+
+    # -------------------------------------------------------------------------
+    # Optional: API token enforcement via header
+    # Traefik does not natively match header values, so for strict enforcement
+    # use a forward-auth sidecar (see docs/README.md).
+    # The middleware below is provided as a placeholder pattern; replace the
+    # forwardAuth address with your sidecar URL when deployed.
+    # -------------------------------------------------------------------------
+    # api-token-auth:
+    #   forwardAuth:
+    #     address: "http://host.docker.internal:9000/auth"
+    #     authRequestHeaders:
+    #       - "Authorization"
+    #       - "X-Api-Key"

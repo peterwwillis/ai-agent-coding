@@ -1,0 +1,11 @@
+# Ignore generated TLS certificates and keys – never commit secrets
+certs/
+*.crt
+*.key
+*.pem
+*.srl
+*.csr
+
+# Caddy data volumes (if bind-mounted locally)
+caddy_data/
+caddy_config/
