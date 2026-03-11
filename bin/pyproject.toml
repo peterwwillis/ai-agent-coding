@@ -10,6 +10,7 @@ package-mode = false
 python = "^3.10"
 ruamel-yaml = "*"
 pyyaml = "*"
+chromadb = ">=1.0"
 
 
 [tool.poetry.group.dev.dependencies]
