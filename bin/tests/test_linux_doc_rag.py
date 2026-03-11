@@ -224,12 +224,39 @@ class TestIterDocFiles:
         files = list(rag.iter_doc_files([str(tmp_path)]))
         assert any(p.name == "README" for p, _ in files)
 
-    def test_finds_changelog_md(self, tmp_path):
+    def test_skips_changelog_files(self, tmp_path):
         pkg = tmp_path / "mypkg"
         pkg.mkdir()
         (pkg / "CHANGELOG.md").write_text("# Changelog")
+        (pkg / "ChangeLog").write_text("2024-01-01 fix")
+        (pkg / "changelog.gz").write_bytes(b"fake")
         files = list(rag.iter_doc_files([str(tmp_path)]))
-        assert any(p.name == "CHANGELOG.md" for p, _ in files)
+        names = {p.name for p, _ in files}
+        assert "CHANGELOG.md" not in names
+        assert "ChangeLog" not in names
+        assert "changelog.gz" not in names
+
+    def test_skips_copyright_files(self, tmp_path):
+        pkg = tmp_path / "mypkg"
+        pkg.mkdir()
+        (pkg / "copyright").write_text("(C) 2024 …")
+        (pkg / "COPYRIGHT").write_text("(C) 2024 …")
+        (pkg / "COPYING.copyright").write_text("GPL text")
+        files = list(rag.iter_doc_files([str(tmp_path)]))
+        names = {p.name for p, _ in files}
+        assert "copyright" not in names
+        assert "COPYRIGHT" not in names
+        assert "COPYING.copyright" not in names
+
+    def test_finds_arbitrary_text_file(self, tmp_path):
+        pkg = tmp_path / "mypkg"
+        pkg.mkdir()
+        (pkg / "NEWS").write_text("Release notes")
+        (pkg / "features.txt").write_text("Feature list")
+        files = list(rag.iter_doc_files([str(tmp_path)]))
+        names = {p.name for p, _ in files}
+        assert "NEWS" in names
+        assert "features.txt" in names
 
     def test_skips_large_files(self, tmp_path):
         pkg = tmp_path / "mypkg"
@@ -239,10 +266,10 @@ class TestIterDocFiles:
         files = list(rag.iter_doc_files([str(tmp_path)]))
         assert files == []
 
-    def test_skips_unrecognised_extensions(self, tmp_path):
+    def test_skips_binary_files(self, tmp_path):
         pkg = tmp_path / "mypkg"
         pkg.mkdir()
-        (pkg / "config.so").write_bytes(b"\x7fELF")
+        (pkg / "libfoo.so").write_bytes(b"\x7fELF\x00more")
         files = list(rag.iter_doc_files([str(tmp_path)]))
         assert files == []
 
@@ -495,7 +522,323 @@ class TestMakeParser:
         args = parser.parse_args(["ingest", "--doc-dirs", "/usr/share/doc"])
         assert args.doc_dirs == ["/usr/share/doc"]
 
+    def test_default_doc_dirs(self):
+        parser = rag.make_parser()
+        args = parser.parse_args(["ingest"])
+        assert args.doc_dirs == rag.DEFAULT_DOC_DIRS
+
+    def test_info_dirs_flag(self):
+        parser = rag.make_parser()
+        args = parser.parse_args(["ingest", "--info-dirs", "/usr/share/info"])
+        assert args.info_dirs == ["/usr/share/info"]
+
+    def test_default_info_dirs(self):
+        parser = rag.make_parser()
+        args = parser.parse_args(["ingest"])
+        assert args.info_dirs == rag.DEFAULT_INFO_DIRS
+
+    def test_config_flag(self):
+        parser = rag.make_parser()
+        args = parser.parse_args(["--config", "/tmp/myconfig.yaml", "ingest"])
+        assert args.config == "/tmp/myconfig.yaml"
+
     def test_no_subcommand_raises(self):
         parser = rag.make_parser()
         with pytest.raises(SystemExit):
             parser.parse_args([])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _is_binary
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestIsBinary:
+    def test_text_file_not_binary(self, tmp_path):
+        p = tmp_path / "readme.txt"
+        p.write_text("This is plain text\n")
+        assert rag._is_binary(p) is False
+
+    def test_elf_binary(self, tmp_path):
+        p = tmp_path / "prog"
+        p.write_bytes(b"\x7fELF\x00\x00\x00more data")
+        assert rag._is_binary(p) is True
+
+    def test_null_byte_in_text(self, tmp_path):
+        p = tmp_path / "mixed"
+        p.write_bytes(b"hello\x00world")
+        assert rag._is_binary(p) is True
+
+    def test_missing_file_treated_as_binary(self, tmp_path):
+        assert rag._is_binary(tmp_path / "nonexistent") is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _strip_info_markup
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestStripInfoMarkup:
+    def test_removes_form_feed(self):
+        text = "before\x1fafter"
+        result = rag._strip_info_markup(text)
+        assert "\x1f" not in result
+        assert "before" in result
+        assert "after" in result
+
+    def test_removes_node_header(self):
+        text = "File: coreutils.info,  Node: Top,  Next: Intro,  Up: (dir)\nContent here"
+        result = rag._strip_info_markup(text)
+        assert "File:" not in result
+        assert "Content here" in result
+
+    def test_removes_info_dir_entry_block(self):
+        text = (
+            "START-INFO-DIR-ENTRY\n"
+            "* foo: (foo).    The foo program.\n"
+            "END-INFO-DIR-ENTRY\n"
+            "Actual content"
+        )
+        result = rag._strip_info_markup(text)
+        assert "START-INFO-DIR-ENTRY" not in result
+        assert "Actual content" in result
+
+    def test_plain_text_preserved(self):
+        text = "The find command searches for files matching a pattern."
+        result = rag._strip_info_markup(text)
+        assert result == text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# render_info_page
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestRenderInfoPage:
+    def _write_info(self, path: Path, content: bytes, gz: bool = False):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if gz:
+            with gzip.open(path, "wb") as fh:
+                fh.write(content)
+        else:
+            path.write_bytes(content)
+
+    def test_renders_plain_info_file(self, tmp_path):
+        content = b"File: test.info,  Node: Top\nThis is the find command.\n"
+        p = tmp_path / "test.info"
+        self._write_info(p, content)
+        text = rag.render_info_page(p)
+        assert text is not None
+        assert "find" in text.lower()
+
+    def test_renders_gzipped_info_file(self, tmp_path):
+        content = b"File: test.info,  Node: Top\nGrep searches text files.\n"
+        p = tmp_path / "test.info.gz"
+        self._write_info(p, content, gz=True)
+        text = rag.render_info_page(p)
+        assert text is not None
+        assert "grep" in text.lower()
+
+    def test_returns_none_for_missing_file(self, tmp_path):
+        result = rag.render_info_page(tmp_path / "nonexistent.info.gz")
+        assert result is None
+
+    def test_returns_none_or_empty_for_empty_file(self, tmp_path):
+        p = tmp_path / "empty.info"
+        self._write_info(p, b"")
+        result = rag.render_info_page(p)
+        assert not result
+
+    def test_strips_info_dir_boilerplate(self, tmp_path):
+        content = (
+            b"START-INFO-DIR-ENTRY\n"
+            b"* foo: (foo).   Foo utility.\n"
+            b"END-INFO-DIR-ENTRY\n"
+            b"The foo utility does bar operations.\n"
+        )
+        p = tmp_path / "foo.info"
+        self._write_info(p, content)
+        text = rag.render_info_page(p)
+        assert text is not None
+        assert "START-INFO-DIR-ENTRY" not in text
+        assert "foo utility" in text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# iter_info_files
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestIterInfoFiles:
+    def _make_info_gz(self, path: Path, content: bytes = b"File: x.info\nContent\n"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(path, "wb") as fh:
+            fh.write(content)
+
+    def test_finds_gzipped_info_file(self, tmp_path):
+        self._make_info_gz(tmp_path / "find.info.gz")
+        pages = list(rag.iter_info_files([str(tmp_path)]))
+        assert len(pages) == 1
+        path, name = pages[0]
+        assert name == "find"
+
+    def test_finds_plain_info_file(self, tmp_path):
+        (tmp_path / "grep.info").write_bytes(b"File: grep.info\nContent\n")
+        pages = list(rag.iter_info_files([str(tmp_path)]))
+        assert len(pages) == 1
+        _, name = pages[0]
+        assert name == "grep"
+
+    def test_skips_dir_index(self, tmp_path):
+        (tmp_path / "dir").write_text("info dir index")
+        (tmp_path / "dir.old").write_text("old dir")
+        pages = list(rag.iter_info_files([str(tmp_path)]))
+        assert pages == []
+
+    def test_skips_sub_files(self, tmp_path):
+        # find.info-1.gz is a sub-file of find.info.gz — should be skipped
+        self._make_info_gz(tmp_path / "find.info-1.gz")
+        self._make_info_gz(tmp_path / "find.info-2.gz")
+        pages = list(rag.iter_info_files([str(tmp_path)]))
+        assert pages == []
+
+    def test_main_file_only_indexed_once(self, tmp_path):
+        self._make_info_gz(tmp_path / "coreutils.info.gz")
+        self._make_info_gz(tmp_path / "coreutils.info-1.gz")
+        self._make_info_gz(tmp_path / "coreutils.info-2.gz")
+        pages = list(rag.iter_info_files([str(tmp_path)]))
+        assert len(pages) == 1
+        assert pages[0][1] == "coreutils"
+
+    def test_missing_dir_skipped_silently(self, tmp_path):
+        pages = list(rag.iter_info_files([str(tmp_path / "nonexistent")]))
+        assert pages == []
+
+    def test_multiple_info_dirs(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        self._make_info_gz(dir_a / "bash.info.gz")
+        self._make_info_gz(dir_b / "vim.info.gz")
+        pages = list(rag.iter_info_files([str(dir_a), str(dir_b)]))
+        names = {p[1] for p in pages}
+        assert "bash" in names
+        assert "vim" in names
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# load_config
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestLoadConfig:
+    def test_returns_empty_dict_for_missing_file(self, tmp_path):
+        result = rag.load_config(tmp_path / "nonexistent.yaml")
+        assert result == {}
+
+    def test_returns_empty_dict_for_empty_file(self, tmp_path):
+        p = tmp_path / "config.yaml"
+        p.write_text("")
+        assert rag.load_config(p) == {}
+
+    def test_parses_simple_flat_config(self, tmp_path):
+        p = tmp_path / "config.yaml"
+        p.write_text("embed_model: mxbai-embed-large\nollama_url: http://10.0.0.1:11434\n")
+        cfg = rag.load_config(p)
+        assert cfg["embed_model"] == "mxbai-embed-large"
+        assert cfg["ollama_url"] == "http://10.0.0.1:11434"
+
+    def test_parses_nested_ingest_section(self, tmp_path):
+        p = tmp_path / "config.yaml"
+        p.write_text("ingest:\n  sections:\n    - '1'\n    - '8'\n  batch_size: 100\n")
+        cfg = rag.load_config(p)
+        assert cfg["ingest"]["sections"] == ["1", "8"]
+        assert cfg["ingest"]["batch_size"] == 100
+
+    def test_parses_nested_query_section(self, tmp_path):
+        p = tmp_path / "config.yaml"
+        p.write_text("query:\n  chat_model: mistral\n  top_k: 10\n")
+        cfg = rag.load_config(p)
+        assert cfg["query"]["chat_model"] == "mistral"
+        assert cfg["query"]["top_k"] == 10
+
+    def test_returns_empty_dict_for_invalid_yaml(self, tmp_path):
+        p = tmp_path / "config.yaml"
+        p.write_text("key: [unclosed bracket\n")
+        assert rag.load_config(p) == {}
+
+    def test_returns_empty_dict_when_root_is_not_dict(self, tmp_path):
+        p = tmp_path / "config.yaml"
+        p.write_text("- item1\n- item2\n")
+        assert rag.load_config(p) == {}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Config defaults applied via make_parser
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestConfigDefaults:
+    def test_shared_setting_overrides_code_default(self):
+        cfg = {"embed_model": "custom-embed", "ollama_url": "http://myhost:11434"}
+        parser = rag.make_parser(config=cfg)
+        args = parser.parse_args(["ingest"])
+        assert args.embed_model == "custom-embed"
+        assert args.ollama_url == "http://myhost:11434"
+
+    def test_cli_flag_overrides_config(self):
+        cfg = {"embed_model": "custom-embed"}
+        parser = rag.make_parser(config=cfg)
+        args = parser.parse_args(["ingest", "--embed-model", "cli-embed"])
+        assert args.embed_model == "cli-embed"
+
+    def test_ingest_section_overrides_batch_size(self):
+        cfg = {"ingest": {"batch_size": 200}}
+        parser = rag.make_parser(config=cfg)
+        args = parser.parse_args(["ingest"])
+        assert args.batch_size == 200
+
+    def test_ingest_section_overrides_sections(self):
+        cfg = {"ingest": {"sections": ["1", "8"]}}
+        parser = rag.make_parser(config=cfg)
+        args = parser.parse_args(["ingest"])
+        assert args.sections == ["1", "8"]
+
+    def test_ingest_section_overrides_info_dirs(self):
+        cfg = {"ingest": {"info_dirs": ["/opt/info"]}}
+        parser = rag.make_parser(config=cfg)
+        args = parser.parse_args(["ingest"])
+        assert args.info_dirs == ["/opt/info"]
+
+    def test_query_section_overrides_chat_model(self):
+        cfg = {"query": {"chat_model": "mistral"}}
+        parser = rag.make_parser(config=cfg)
+        args = parser.parse_args(["query", "test"])
+        assert args.chat_model == "mistral"
+
+    def test_query_section_overrides_top_k(self):
+        cfg = {"query": {"top_k": 12}}
+        parser = rag.make_parser(config=cfg)
+        args = parser.parse_args(["query", "test"])
+        assert args.top_k == 12
+
+    def test_empty_config_uses_code_defaults(self):
+        parser = rag.make_parser(config={})
+        args = parser.parse_args(["ingest"])
+        assert args.embed_model == rag.DEFAULT_EMBED_MODEL
+        assert args.batch_size == 50
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# build_rag_prompt: info source header
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestBuildRagPromptInfoSource:
+    def test_info_source_header(self):
+        chunk = {
+            "document": "The find command traverses directory trees.",
+            "metadata": {"source": "info", "page": "find", "section": "", "section_name": "find"},
+            "distance": 0.1,
+        }
+        prompt = rag.build_rag_prompt("How does find work?", [chunk])
+        assert "[info find]" in prompt
