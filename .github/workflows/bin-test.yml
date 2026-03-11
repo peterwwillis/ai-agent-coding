@@ -1,0 +1,32 @@
+name: bin tests
+
+on:
+  push:
+    paths:
+      - 'bin/**'
+  pull_request:
+    paths:
+      - 'bin/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: bin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Run tests
+        run: make test
