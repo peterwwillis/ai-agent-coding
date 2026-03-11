@@ -8,3 +8,6 @@
 
 # Backup files
 **~
+
+# Go build artifacts
+sgpt/sgpt
