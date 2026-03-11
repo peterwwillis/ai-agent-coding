@@ -1,0 +1,125 @@
+name: sgpt release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sgpt/**'
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to create releases and upload assets
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: sgpt/go.mod
+          cache-dependency-path: sgpt/go.sum
+
+      - name: Extract version from source
+        id: version
+        run: |
+          VERSION=$(grep 'var version = ' sgpt/main.go | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=sgpt/v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this version already has a release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="sgpt/v${{ steps.version.outputs.version }}"
+
+          # Get the latest sgpt release tag (if any)
+          LATEST_TAG=$(gh api "repos/${{ github.repository }}/releases" \
+            --jq '[.[] | select(.tag_name | startswith("sgpt/v"))] | first | .tag_name // ""' \
+            2>/dev/null || echo "")
+
+          echo "Latest release tag : ${LATEST_TAG:-<none>}"
+          echo "Current code tag   : $TAG"
+
+          if [ "$LATEST_TAG" = "$TAG" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Version $TAG is already released — skipping."
+          else
+            # Verify the code version is strictly newer than the latest release.
+            if [ -n "$LATEST_TAG" ]; then
+              LATEST_VER="${LATEST_TAG#sgpt/v}"
+              NEWER=$(printf '%s\n' "$LATEST_VER" "${{ steps.version.outputs.version }}" \
+                | sort -V | tail -1)
+              if [ "$NEWER" != "${{ steps.version.outputs.version }}" ]; then
+                echo "::error::Source version (${{ steps.version.outputs.version }}) is not newer than latest release ($LATEST_VER). Aborting."
+                exit 1
+              fi
+            fi
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Proceeding to release $TAG."
+          fi
+
+      - name: Build binaries
+        if: steps.check.outputs.skip == 'false'
+        working-directory: sgpt
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          LDFLAGS="-X main.version=${VERSION}"
+          mkdir -p dist
+
+          build() {
+            local os=$1 arch=$2
+            local suffix=""
+            [ "$os" = "windows" ] && suffix=".exe"
+            local out="dist/sgpt_${os}_${arch}${suffix}"
+            echo "Building $out ..."
+            GOOS="$os" GOARCH="$arch" go build -ldflags "$LDFLAGS" -o "$out" .
+          }
+
+          build linux  amd64
+          build linux  arm64
+          build darwin amd64
+          build darwin arm64
+          build windows amd64
+
+          # Produce checksums
+          cd dist
+          sha256sum sgpt_* > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Create GitHub release and upload assets
+        if: steps.check.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "sgpt $VERSION" \
+            --notes "Release of sgpt version $VERSION.
+
+          ## Installation
+
+          Download the binary for your platform from the assets below, make it
+          executable, and place it on your \`PATH\`:
+
+          \`\`\`bash
+          # Linux (amd64 example)
+          curl -fsSL https://github.com/${{ github.repository }}/releases/download/$TAG/sgpt_linux_amd64 -o sgpt
+          chmod +x sgpt
+          \`\`\`
+
+          Verify the download against \`sha256sums.txt\` before use." \
+            sgpt/dist/sgpt_linux_amd64 \
+            sgpt/dist/sgpt_linux_arm64 \
+            sgpt/dist/sgpt_darwin_amd64 \
+            sgpt/dist/sgpt_darwin_arm64 \
+            sgpt/dist/sgpt_windows_amd64.exe \
+            sgpt/dist/sha256sums.txt

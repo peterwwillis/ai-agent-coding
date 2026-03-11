@@ -19,7 +19,9 @@ import (
 	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/role"
 )
 
-const version = "1.0.0"
+// version is set at build time via -ldflags "-X main.version=X.Y.Z".
+// The value here is the authoritative version embedded in source.
+var version = "1.0.0"
 
 func main() {
 	if err := rootCmd().Execute(); err != nil {
