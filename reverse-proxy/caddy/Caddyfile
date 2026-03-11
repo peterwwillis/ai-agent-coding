@@ -27,13 +27,20 @@
 #   llama.cpp RPC     8081
 #   noVNC (VNC)       6080
 #
-# Basic-auth password hash:
-#   Generate with: ../scripts/gen-bcrypt.sh mypassword
-#   Replace the placeholder hash below before exposing to the network.
+# Basic-auth credentials:
+#   Set PROXY_AUTH_USER and PROXY_AUTH_HASH in .env (see .env.example).
+#   Caddy substitutes {env.VAR} placeholders at startup – no secrets in this file.
+#   Generate a hash with: make gen-hash
+#
+#   To load from an external secrets manager, export vars before starting:
+#     export PROXY_AUTH_USER=admin
+#     export PROXY_AUTH_HASH="$(vault kv get -field=hash secret/proxy)"
+#     make up
 # =============================================================================
 
-# Change mac.local to your machine's hostname or IP
-mac.local {
+# Change mac.local to your machine's hostname or IP.
+# You can also use {env.PROXY_DOMAIN} here if set in .env.
+{$PROXY_DOMAIN:mac.local} {
 
     # --------------------------------------------------------------------------
     # Local TLS – serve the self-signed / CA-signed certificate
@@ -47,16 +54,6 @@ mac.local {
         output stderr
         level  INFO
     }
-
-    # --------------------------------------------------------------------------
-    # Basic-auth credentials (used by sensitive routes below)
-    # Generate hash: ../scripts/gen-bcrypt.sh mypassword
-    # IMPORTANT: Replace the placeholder hash before using in production.
-    # --------------------------------------------------------------------------
-    # We define the hash once and reference it in each route's basicauth block.
-    # Caddy uses bcrypt hashes in the format produced by `caddy hash-password`.
-    # The hash below is the Caddy-format bcrypt for the password "changeme".
-    # Replace with output of: docker run --rm caddy:2.9-alpine caddy hash-password --plaintext 'yourpassword'
 
     # --------------------------------------------------------------------------
     # /ollama – local Ollama inference server
@@ -87,11 +84,11 @@ mac.local {
 
     # --------------------------------------------------------------------------
     # /n8n – workflow automation (PROTECTED)
+    # Credentials loaded from PROXY_AUTH_USER / PROXY_AUTH_HASH env vars.
     # --------------------------------------------------------------------------
     handle_path /n8n/* {
         basicauth * {
-            # username: admin  |  replace hash below with real bcrypt hash
-            admin $2y$10$placeholder.replace.me.with.real.bcrypt.hash.ABC
+            {$PROXY_AUTH_USER:admin} {$PROXY_AUTH_HASH}
         }
         reverse_proxy host.docker.internal:5678 {
             header_up Host {upstream_hostport}
@@ -103,7 +100,7 @@ mac.local {
     # --------------------------------------------------------------------------
     handle_path /terminal/* {
         basicauth * {
-            admin $2y$10$placeholder.replace.me.with.real.bcrypt.hash.ABC
+            {$PROXY_AUTH_USER:admin} {$PROXY_AUTH_HASH}
         }
         reverse_proxy host.docker.internal:7681 {
             header_up Host {upstream_hostport}
@@ -118,7 +115,7 @@ mac.local {
     # --------------------------------------------------------------------------
     handle_path /code/* {
         basicauth * {
-            admin $2y$10$placeholder.replace.me.with.real.bcrypt.hash.ABC
+            {$PROXY_AUTH_USER:admin} {$PROXY_AUTH_HASH}
         }
         reverse_proxy host.docker.internal:8443 {
             header_up Host {upstream_hostport}
@@ -150,7 +147,7 @@ mac.local {
     # --------------------------------------------------------------------------
     handle_path /vnc/* {
         basicauth * {
-            admin $2y$10$placeholder.replace.me.with.real.bcrypt.hash.ABC
+            {$PROXY_AUTH_USER:admin} {$PROXY_AUTH_HASH}
         }
         reverse_proxy host.docker.internal:6080 {
             header_up Host {upstream_hostport}

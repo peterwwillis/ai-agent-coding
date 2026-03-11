@@ -7,17 +7,24 @@ http:
     # -------------------------------------------------------------------------
     # Basic Authentication
     # -------------------------------------------------------------------------
-    # Generate a bcrypt hash with:  ../scripts/gen-bcrypt.sh mypassword
-    # The format is:  username:$$2y$$...hash... (dollar signs doubled for YAML)
+    # Credentials are loaded from ./secrets/users (mounted read-only into the
+    # container). Generate this file with:
     #
-    # IMPORTANT: Replace the placeholder hash below with a real bcrypt hash
-    #            before exposing any protected route to the network.
+    #   make gen-users-file        (reads PROXY_AUTH_USER + PROXY_AUTH_HASH from .env)
+    #
+    # The file uses Apache htpasswd format – one entry per line:
+    #   username:$2y$10$...bcrypt-hash...
+    #
+    # To generate a bcrypt hash: make gen-hash
+    #
+    # To load credentials from an external secrets manager, export the
+    # variables before calling make:
+    #   export PROXY_AUTH_USER=admin
+    #   export PROXY_AUTH_HASH="$(vault kv get -field=hash secret/proxy)"
+    #   make gen-users-file
     basic-auth:
       basicAuth:
-        users:
-          # Placeholder – username: admin, password: changeme
-          # Replace with output of: ../scripts/gen-bcrypt.sh changeme
-          - "admin:$$2y$$10$$placeholder.replace.me.with.real.bcrypt.hash.XYZ"
+        usersFile: /etc/traefik/secrets/users
         realm: "Local AI Services"
         # Remove HTTP Authorization header before forwarding to upstream
         removeHeader: true

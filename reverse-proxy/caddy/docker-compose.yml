@@ -1,10 +1,14 @@
 # Caddy reverse-proxy stack for local AI services
 # Usage: docker compose up -d
 #
-# Place TLS cert/key files in ./certs/ before starting:
-#   certs/local.crt
-#   certs/local.key
-# See ../scripts/gen-certs.sh to generate them.
+# Prerequisites:
+#   1. Copy .env.example to .env and fill in your credentials:
+#        cp .env.example .env && $EDITOR .env
+#   2. Generate TLS cert/key files in ./certs/:
+#        make gen-certs
+#
+# Or run both steps in one go:
+#   make setup
 
 services:
   caddy:
@@ -24,9 +28,17 @@ services:
       - caddy_config:/config
     networks:
       - proxy
+    # Credentials and domain are loaded from .env (never hard-coded here).
+    # PROXY_AUTH_USER, PROXY_AUTH_HASH, and PROXY_DOMAIN are substituted by
+    # Caddy at startup via {$VAR} placeholders in the Caddyfile.
+    env_file:
+      - .env
     environment:
       # Disable automatic HTTPS – we supply our own cert
       - CADDY_AUTO_TLS=off
+    # Linux: uncomment to make host services reachable as host.docker.internal
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
 
 volumes:
   caddy_data:
