@@ -12,6 +12,24 @@ go build -o sgpt .
 go install .
 ```
 
+## Development
+
+A `Makefile` in the `sgpt/` directory provides common tasks:
+
+```bash
+make build   # compile the sgpt binary
+make vet     # run go vet on all packages
+make test    # run all unit tests
+make clean   # remove the compiled binary
+```
+
+Unit tests run without a real API key and without network access — they cover
+config loading, request caching, chat session persistence, and role management.
+
+A GitHub Actions workflow (`.github/workflows/sgpt-test.yml`) runs `make vet`
+and `make test` automatically on every pull request that touches files under
+`sgpt/`.
+
 ## Configuration
 
 On first run, `sgpt` will prompt for your OpenAI API key (if it is not already
@@ -160,11 +178,96 @@ sgpt --editor   # opens $EDITOR; content becomes the prompt on save & exit
 `sgpt` works with any OpenAI-compatible API. Set `API_BASE_URL` in the config
 (or via environment variable) to point to a local backend such as
 [Ollama](https://github.com/ollama/ollama) or
-[llama-swap](https://github.com/mostlygeek/llama-swap):
+[llama-swap](https://github.com/mostlygeek/llama-swap).
+
+### Running against a local LLM with Ollama
+
+[Ollama](https://ollama.com) lets you run open-source LLMs (Llama 3, Mistral,
+Phi-3, Gemma, …) entirely on your own machine without sending data to any
+external API.
+
+#### 1. Install Ollama
 
 ```bash
-export API_BASE_URL=http://localhost:11434/v1
-export OPENAI_API_KEY=ollama   # required but can be any non-empty value
-export DEFAULT_MODEL=llama3
-sgpt "Hello!"
+# macOS / Linux (official install script)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# macOS via Homebrew
+brew install ollama
+
+# Start the Ollama daemon (if it is not already running)
+ollama serve &
 ```
+
+On Windows, download the installer from <https://ollama.com/download>.
+
+#### 2. Pull a model
+
+```bash
+# Small, fast model — good for code and shell tasks
+ollama pull llama3.2
+
+# Larger, higher-quality model
+ollama pull llama3.1:8b
+
+# Coding-specific model
+ollama pull codellama
+
+# List locally available models
+ollama list
+```
+
+#### 3. Configure sgpt to use Ollama
+
+Ollama exposes an OpenAI-compatible REST API at `http://localhost:11434/v1`.
+Point `sgpt` at it by setting environment variables (or adding them to
+`~/.config/shell_gpt/.sgptrc`):
+
+```bash
+export OPENAI_API_KEY=ollama   # any non-empty string — Ollama ignores it
+export API_BASE_URL=http://localhost:11434/v1
+export DEFAULT_MODEL=llama3.2  # must match the name shown by `ollama list`
+```
+
+#### 4. Use sgpt normally
+
+```bash
+sgpt "Explain the difference between a mutex and a semaphore"
+sgpt -s "list files modified in the last 24 hours"
+sgpt -c "write a Go function that reverses a string"
+```
+
+#### Persistent configuration via the config file
+
+To make the Ollama settings permanent, add them to
+`~/.config/shell_gpt/.sgptrc`:
+
+```
+OPENAI_API_KEY=ollama
+API_BASE_URL=http://localhost:11434/v1
+DEFAULT_MODEL=llama3.2
+DISABLE_STREAMING=false
+```
+
+#### Tips for local models
+
+| Setting | Recommended value | Reason |
+|---|---|---|
+| `DISABLE_STREAMING` | `false` | Local models can be slow; streaming shows tokens as they arrive |
+| `REQUEST_TIMEOUT` | `120` | Local inference takes longer than remote APIs |
+| `DEFAULT_MODEL` | exact name from `ollama list` | Model names are case-sensitive |
+
+Set a longer timeout when using large models or slow hardware:
+
+```bash
+export REQUEST_TIMEOUT=120
+```
+
+#### Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `connection refused` on port 11434 | Run `ollama serve` or start the Ollama desktop app |
+| `model not found` error | Run `ollama pull <model>` first, then verify name with `ollama list` |
+| Very slow responses | Try a smaller quantised model, e.g. `llama3.2:1b` or `phi3:mini` |
+| Streaming cuts off | Set `DISABLE_STREAMING=true` as a workaround |
