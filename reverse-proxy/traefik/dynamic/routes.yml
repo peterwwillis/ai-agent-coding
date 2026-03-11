@@ -1,0 +1,223 @@
+# Traefik HTTP router and service definitions for local AI services.
+#
+# Host reachability notes
+# -----------------------
+# macOS / Docker Desktop: upstream services on the host are reachable at
+#   host.docker.internal (automatically set by Docker Desktop).
+#
+# Linux: host.docker.internal is NOT set by default. Options:
+#   a) Use the host-gateway extra_host in docker-compose.yml:
+#        extra_hosts:
+#          - "host.docker.internal:host-gateway"
+#   b) Or replace host.docker.internal below with the host's LAN IP, e.g. 192.168.1.10
+#
+# Service port defaults (adjust to match your local setup):
+#   Ollama           11434
+#   llama-swap        8080
+#   Open WebUI        3000
+#   n8n               5678
+#   ttyd (terminal)   7681
+#   code-server       8443
+#   SearXNG           8888
+#   llama.cpp RPC     8081
+#   noVNC (VNC)       6080
+
+http:
+  routers:
+
+    # -------------------------------------------------------------------------
+    # Ollama – local LLM inference server
+    # Accessible at: https://<host>/ollama/
+    # -------------------------------------------------------------------------
+    ollama:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/ollama`)"
+      service: ollama
+      middlewares:
+        - strip-ollama
+        - secure-headers
+      tls: {}
+      priority: 10
+
+    # -------------------------------------------------------------------------
+    # llama-swap – llama.cpp model-swap proxy
+    # Accessible at: https://<host>/llama-swap/
+    # -------------------------------------------------------------------------
+    llama-swap:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/llama-swap`)"
+      service: llama-swap
+      middlewares:
+        - strip-llama-swap
+        - secure-headers
+      tls: {}
+      priority: 10
+
+    # -------------------------------------------------------------------------
+    # Open WebUI – chat front-end for Ollama
+    # Accessible at: https://<host>/openwebui/
+    # -------------------------------------------------------------------------
+    openwebui:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/openwebui`)"
+      service: openwebui
+      middlewares:
+        - strip-openwebui
+        - secure-headers
+      tls: {}
+      priority: 10
+
+    # -------------------------------------------------------------------------
+    # n8n – workflow automation (PROTECTED)
+    # Accessible at: https://<host>/n8n/
+    # -------------------------------------------------------------------------
+    n8n:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/n8n`)"
+      service: n8n
+      middlewares:
+        - protected         # basic-auth + secure-headers
+        - strip-n8n
+      tls: {}
+      priority: 10
+
+    # -------------------------------------------------------------------------
+    # Terminal (ttyd) – web terminal (PROTECTED, WebSocket-capable)
+    # Accessible at: https://<host>/terminal/
+    # -------------------------------------------------------------------------
+    terminal:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/terminal`)"
+      service: terminal
+      middlewares:
+        - protected         # basic-auth + secure-headers
+        - strip-terminal
+      tls: {}
+      priority: 10
+
+    # -------------------------------------------------------------------------
+    # code-server – browser-based VS Code (PROTECTED, WebSocket-capable)
+    # Accessible at: https://<host>/code/
+    # -------------------------------------------------------------------------
+    code:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/code`)"
+      service: code
+      middlewares:
+        - protected         # basic-auth + secure-headers
+        - strip-code
+      tls: {}
+      priority: 10
+
+    # -------------------------------------------------------------------------
+    # SearXNG – local meta-search engine
+    # Accessible at: https://<host>/searxng/
+    # -------------------------------------------------------------------------
+    searxng:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/searxng`)"
+      service: searxng
+      middlewares:
+        - strip-searxng
+        - secure-headers
+      tls: {}
+      priority: 10
+
+    # -------------------------------------------------------------------------
+    # llama.cpp RPC frontend/aggregator
+    # Accessible at: https://<host>/llamacpp-rpc/
+    # -------------------------------------------------------------------------
+    llamacpp-rpc:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/llamacpp-rpc`)"
+      service: llamacpp-rpc
+      middlewares:
+        - strip-llamacpp-rpc
+        - secure-headers
+      tls: {}
+      priority: 10
+
+    # -------------------------------------------------------------------------
+    # noVNC – web VNC client (PROTECTED, WebSocket-capable)
+    # Accessible at: https://<host>/vnc/
+    # -------------------------------------------------------------------------
+    vnc:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/vnc`)"
+      service: vnc
+      middlewares:
+        - protected         # basic-auth + secure-headers
+        - strip-vnc
+      tls: {}
+      priority: 10
+
+  # ---------------------------------------------------------------------------
+  # Backend service definitions
+  # Replace host.docker.internal with a LAN IP on Linux (see notes at top).
+  # ---------------------------------------------------------------------------
+  services:
+
+    ollama:
+      loadBalancer:
+        passHostHeader: false
+        servers:
+          - url: "http://host.docker.internal:11434"
+
+    llama-swap:
+      loadBalancer:
+        passHostHeader: false
+        servers:
+          - url: "http://host.docker.internal:8080"
+
+    openwebui:
+      loadBalancer:
+        passHostHeader: false
+        servers:
+          - url: "http://host.docker.internal:3000"
+
+    n8n:
+      loadBalancer:
+        passHostHeader: false
+        servers:
+          - url: "http://host.docker.internal:5678"
+
+    terminal:
+      loadBalancer:
+        passHostHeader: false
+        # ttyd default port; WebSocket upgrade is handled transparently
+        servers:
+          - url: "http://host.docker.internal:7681"
+
+    code:
+      loadBalancer:
+        passHostHeader: false
+        servers:
+          - url: "http://host.docker.internal:8443"
+
+    searxng:
+      loadBalancer:
+        passHostHeader: false
+        servers:
+          - url: "http://host.docker.internal:8888"
+
+    llamacpp-rpc:
+      loadBalancer:
+        passHostHeader: false
+        servers:
+          - url: "http://host.docker.internal:8081"
+
+    vnc:
+      loadBalancer:
+        passHostHeader: false
+        # noVNC default port; WebSocket upgrade handled transparently
+        servers:
+          - url: "http://host.docker.internal:6080"

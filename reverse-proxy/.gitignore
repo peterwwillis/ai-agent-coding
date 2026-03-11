@@ -1,0 +1,17 @@
+# Ignore generated TLS certificates and keys – never commit secrets
+certs/
+*.crt
+*.key
+*.pem
+*.srl
+*.csr
+
+# Ignore the live credentials file – use .env.example as the template
+.env
+
+# Ignore the Traefik basic-auth users file generated from .env
+secrets/
+
+# Caddy data volumes (if bind-mounted locally)
+caddy_data/
+caddy_config/

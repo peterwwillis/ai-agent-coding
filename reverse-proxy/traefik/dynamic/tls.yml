@@ -1,0 +1,21 @@
+# Traefik TLS configuration – loaded from the file provider
+# Cert and key paths are relative to the container's mounted /etc/traefik/certs/ directory.
+# Update the filenames to match what gen-certs.sh produced (or your own CA-signed cert).
+
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/local.crt
+      keyFile:  /etc/traefik/certs/local.key
+
+  # Default TLS options applied to all HTTPS connections
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_AES_128_GCM_SHA256
+        - TLS_AES_256_GCM_SHA384
+      sniStrict: false

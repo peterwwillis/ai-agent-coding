@@ -1,0 +1,116 @@
+# Traefik middleware definitions
+# These are referenced by name in routes.yml.
+
+http:
+  middlewares:
+
+    # -------------------------------------------------------------------------
+    # Basic Authentication
+    # -------------------------------------------------------------------------
+    # Credentials are loaded from ./secrets/users (mounted read-only into the
+    # container). Generate this file with:
+    #
+    #   make gen-users-file        (reads PROXY_AUTH_USER + PROXY_AUTH_HASH from .env)
+    #
+    # The file uses Apache htpasswd format – one entry per line:
+    #   username:$2y$10$...bcrypt-hash...
+    #
+    # To generate a bcrypt hash: make gen-hash
+    #
+    # To load credentials from an external secrets manager, export the
+    # variables before calling make:
+    #   export PROXY_AUTH_USER=admin
+    #   export PROXY_AUTH_HASH="$(vault kv get -field=hash secret/proxy)"
+    #   make gen-users-file
+    basic-auth:
+      basicAuth:
+        usersFile: /etc/traefik/secrets/users
+        realm: "Local AI Services"
+        # Remove HTTP Authorization header before forwarding to upstream
+        removeHeader: true
+
+    # -------------------------------------------------------------------------
+    # Strip-prefix middlewares
+    # Each service has its own strip-prefix so the upstream receives only the
+    # path that follows the prefix, e.g. /ollama/api/... -> /api/...
+    # -------------------------------------------------------------------------
+    strip-ollama:
+      stripPrefix:
+        prefixes:
+          - "/ollama"
+
+    strip-llama-swap:
+      stripPrefix:
+        prefixes:
+          - "/llama-swap"
+
+    strip-openwebui:
+      stripPrefix:
+        prefixes:
+          - "/openwebui"
+
+    strip-n8n:
+      stripPrefix:
+        prefixes:
+          - "/n8n"
+
+    strip-terminal:
+      stripPrefix:
+        prefixes:
+          - "/terminal"
+
+    strip-code:
+      stripPrefix:
+        prefixes:
+          - "/code"
+
+    strip-searxng:
+      stripPrefix:
+        prefixes:
+          - "/searxng"
+
+    strip-llamacpp-rpc:
+      stripPrefix:
+        prefixes:
+          - "/llamacpp-rpc"
+
+    strip-vnc:
+      stripPrefix:
+        prefixes:
+          - "/vnc"
+
+    # -------------------------------------------------------------------------
+    # Secure headers – applied globally or per-route
+    # -------------------------------------------------------------------------
+    secure-headers:
+      headers:
+        sslRedirect: false            # already on HTTPS
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+    # -------------------------------------------------------------------------
+    # Protected chain – use for sensitive services (n8n, terminal, code, vnc)
+    # Combines basic-auth + secure-headers into one named middleware chain.
+    # -------------------------------------------------------------------------
+    protected:
+      chain:
+        middlewares:
+          - basic-auth
+          - secure-headers
+
+    # -------------------------------------------------------------------------
+    # Optional: API token enforcement via header
+    # Traefik does not natively match header values, so for strict enforcement
+    # use a forward-auth sidecar (see docs/README.md).
+    # The middleware below is provided as a placeholder pattern; replace the
+    # forwardAuth address with your sidecar URL when deployed.
+    # -------------------------------------------------------------------------
+    # api-token-auth:
+    #   forwardAuth:
+    #     address: "http://host.docker.internal:9000/auth"
+    #     authRequestHeaders:
+    #       - "Authorization"
+    #       - "X-Api-Key"
