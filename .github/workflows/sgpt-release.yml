@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'sgpt/**'
+      - 'apps/sgpt/**'
 
 jobs:
   release:
@@ -21,13 +21,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: sgpt/go.mod
-          cache-dependency-path: sgpt/go.sum
+          go-version-file: apps/sgpt/go.mod
+          cache-dependency-path: apps/sgpt/go.sum
 
       - name: Extract version from source
         id: version
         run: |
-          VERSION=$(grep 'var version = ' sgpt/main.go | sed 's/.*"\(.*\)".*/\1/')
+          VERSION=$(grep 'var version = ' apps/sgpt/main.go | sed 's/.*"\(.*\)".*/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=sgpt/v$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -66,7 +66,7 @@ jobs:
 
       - name: Build binaries
         if: steps.check.outputs.skip == 'false'
-        working-directory: sgpt
+        working-directory: apps/sgpt
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           LDFLAGS="-X main.version=${VERSION}"
@@ -117,9 +117,9 @@ jobs:
           \`\`\`
 
           Verify the download against \`sha256sums.txt\` before use." \
-            sgpt/dist/sgpt_linux_amd64 \
-            sgpt/dist/sgpt_linux_arm64 \
-            sgpt/dist/sgpt_darwin_amd64 \
-            sgpt/dist/sgpt_darwin_arm64 \
-            sgpt/dist/sgpt_windows_amd64.exe \
-            sgpt/dist/sha256sums.txt
+            apps/sgpt/dist/sgpt_linux_amd64 \
+            apps/sgpt/dist/sgpt_linux_arm64 \
+            apps/sgpt/dist/sgpt_darwin_amd64 \
+            apps/sgpt/dist/sgpt_darwin_arm64 \
+            apps/sgpt/dist/sgpt_windows_amd64.exe \
+            apps/sgpt/dist/sha256sums.txt

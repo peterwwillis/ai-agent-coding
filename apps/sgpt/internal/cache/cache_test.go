@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/cache"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/cache"
 )
 
 func TestCacheSetGet(t *testing.T) {

@@ -12,11 +12,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/chat"
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/client"
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/config"
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/handler"
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/role"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/chat"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/client"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/config"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/handler"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/role"
 )
 
 // version is set at build time via -ldflags "-X main.version=X.Y.Z".

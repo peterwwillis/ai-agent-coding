@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/role"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/role"
 )
 
 func TestGetForModeDefault(t *testing.T) {

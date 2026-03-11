@@ -1,4 +1,4 @@
-module github.com/peterwwillis/ai-agent-coding/sgpt
+module github.com/peterwwillis/ai-agent-coding/apps/sgpt
 
 go 1.24.13
 

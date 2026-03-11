@@ -10,10 +10,10 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/cache"
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/chat"
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/client"
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/role"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/cache"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/chat"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/client"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/role"
 )
 
 // Options configures a completion request.

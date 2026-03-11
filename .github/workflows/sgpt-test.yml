@@ -3,7 +3,7 @@ name: sgpt tests
 on:
   pull_request:
     paths:
-      - 'sgpt/**'
+      - 'apps/sgpt/**'
 
 jobs:
   test:
@@ -13,7 +13,7 @@ jobs:
       contents: read
     defaults:
       run:
-        working-directory: sgpt
+        working-directory: apps/sgpt
 
     steps:
       - name: Checkout code
@@ -22,8 +22,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: sgpt/go.mod
-          cache-dependency-path: sgpt/go.sum
+          go-version-file: apps/sgpt/go.mod
+          cache-dependency-path: apps/sgpt/go.sum
 
       - name: Vet
         run: make vet
@@ -45,16 +45,16 @@ jobs:
 
       - name: Check version is newer than base branch
         run: |
-          PR_VERSION=$(grep 'var version = ' sgpt/main.go | sed 's/.*"\(.*\)".*/\1/')
+          PR_VERSION=$(grep 'var version = ' apps/sgpt/main.go | sed 's/.*"\(.*\)".*/\1/')
           git fetch origin "${{ github.base_ref }}" --depth=1
-          BASE_VERSION=$(git show "origin/${{ github.base_ref }}:sgpt/main.go" \
+          BASE_VERSION=$(git show "origin/${{ github.base_ref }}:apps/sgpt/main.go" \
             | grep 'var version = ' | sed 's/.*"\(.*\)".*/\1/')
 
           echo "Base branch version : $BASE_VERSION"
           echo "PR branch version   : $PR_VERSION"
 
           if [ "$PR_VERSION" = "$BASE_VERSION" ]; then
-            echo "::error file=sgpt/main.go::Version not bumped. Please update 'var version' in sgpt/main.go (currently $PR_VERSION)."
+            echo "::error file=apps/sgpt/main.go::Version not bumped. Please update 'var version' in apps/sgpt/main.go (currently $PR_VERSION)."
             exit 1
           fi
           echo "Version bumped: $BASE_VERSION -> $PR_VERSION"

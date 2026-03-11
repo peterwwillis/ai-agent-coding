@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/chat"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/chat"
 )
 
 func TestChatSessionAddAndLoad(t *testing.T) {

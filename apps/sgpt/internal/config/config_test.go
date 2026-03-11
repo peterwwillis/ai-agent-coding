@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/peterwwillis/ai-agent-coding/sgpt/internal/config"
+	"github.com/peterwwillis/ai-agent-coding/apps/sgpt/internal/config"
 )
 
 func TestLoadCreatesConfigWithAPIKey(t *testing.T) {
