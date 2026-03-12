@@ -14,14 +14,23 @@ import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
 
 DEFAULT_N_GPU_LAYERS = "40"
+DEFAULT_CTX_SIZE = 4096
 LOG_NAME_MAX = 64
 BATCH_AUTO = "auto"
+MODEL_SETTINGS_TO_FLAGS = {
+    "temp": "--temp",
+    "top_p": "--top-p",
+    "top_k": "--top-k",
+    "min_p": "--min-p",
+    "presence_penalty": "--presence-penalty",
+    "repetition_penalty": "--repeat-penalty",
+}
 
 HELP_EPILOG = """Batch/ubatch guidance
 
@@ -58,6 +67,10 @@ def default_llama_cache_dir() -> Path:
 
 def default_llama_swap_config_path() -> Path:
     return Path.home() / ".config" / "llama-swap" / "config.yaml"
+
+
+def default_model_settings_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "models" / "model-settings.yml"
 
 
 def read_gguf_chat_template(path: Path) -> Optional[str]:
@@ -270,6 +283,94 @@ class HardwareProfile:
     vram_gb: Optional[float] = None
 
 
+@dataclass(frozen=True)
+class ModelModeSettings:
+    thinking: Optional[bool]
+    extra_args: List[Tuple[str, Any]]
+
+
+def _format_cli_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def load_model_settings_modes(path: Path, log) -> Dict[str, Dict[str, ModelModeSettings]]:
+    raw = load_yaml_file(path)
+    if not raw:
+        return {}
+
+    default_thinking = raw.get("thinking")
+    if not isinstance(default_thinking, bool):
+        default_thinking = None
+
+    models = raw.get("models")
+    if not isinstance(models, dict):
+        return {}
+
+    mode_index: Dict[str, Dict[str, ModelModeSettings]] = {}
+    for model_name, model_cfg in models.items():
+        if not isinstance(model_name, str) or not isinstance(model_cfg, dict):
+            continue
+        modes = model_cfg.get("modes")
+        if not isinstance(modes, dict):
+            continue
+
+        model_modes: Dict[str, ModelModeSettings] = {}
+        for mode_name, mode_cfg in modes.items():
+            if not isinstance(mode_name, str) or not isinstance(mode_cfg, dict):
+                continue
+
+            mode_thinking = default_thinking
+            if "thinking" in mode_cfg:
+                if isinstance(mode_cfg["thinking"], bool):
+                    mode_thinking = mode_cfg["thinking"]
+                else:
+                    log(
+                        f"Ignoring non-boolean 'thinking' for model '{model_name}' mode '{mode_name}'."
+                    )
+
+            extra_args: List[Tuple[str, Any]] = []
+            for setting_name, flag_name in MODEL_SETTINGS_TO_FLAGS.items():
+                setting_value = mode_cfg.get(setting_name)
+                if setting_value is not None:
+                    extra_args.append((flag_name, setting_value))
+
+            model_modes[mode_name] = ModelModeSettings(
+                thinking=mode_thinking,
+                extra_args=extra_args,
+            )
+
+        if model_modes:
+            mode_index[model_name] = model_modes
+
+    return mode_index
+
+
+def model_settings_candidates(models_dir: Path, model_path: Path, base_name: str) -> List[str]:
+    candidates = [base_name]
+    try:
+        rel_path = model_path.relative_to(models_dir)
+    except ValueError:
+        return candidates
+
+    parent_name = rel_path.parent.as_posix()
+    if parent_name not in {"", "."}:
+        candidates.append(parent_name)
+
+    rel_without_suffix = rel_path.with_suffix("").as_posix()
+    if rel_without_suffix not in {"", "."}:
+        candidates.append(rel_without_suffix)
+
+    seen = set()
+    deduped = []
+    for candidate in candidates:
+        if candidate not in seen:
+            deduped.append(candidate)
+            seen.add(candidate)
+    return deduped
+
+
 def read_int_file(path: Path) -> Optional[int]:
     try:
         return int(path.read_text(encoding="utf-8").strip())
@@ -408,6 +509,8 @@ def build_cmd(
     batch_size: Optional[int],
     ubatch_size: Optional[int],
     log_file: Path,
+    fit: bool,
+    extra_args: Optional[List[Tuple[str, Any]]] = None,
 ) -> LiteralScalarString:
     # Build logical groups of flag + value(s), one per line.
     lines = [
@@ -423,6 +526,11 @@ def build_cmd(
         f"  --cache-type-v {shlex.quote(cache_type_v)}",
         f"  --flash-attn {shlex.quote(flash_attn)}",
     ]
+    if fit:
+        lines.append("  -fit on")
+    if extra_args:
+        for flag_name, setting_value in extra_args:
+            lines.append(f"  {flag_name} {shlex.quote(_format_cli_value(setting_value))}")
     if batch_size is not None and ubatch_size is not None:
         lines.append(f"  --batch-size {batch_size} --ubatch-size {ubatch_size}")
     if n_gpu_layers is not None:
@@ -483,8 +591,8 @@ def set_parser_args(parser):
     parser.add_argument(
         "--ctx-size",
         type=int,
-        default=2048,
-        help="Context size (default: 2048).",
+        default=DEFAULT_CTX_SIZE,
+        help=f"Context size (default: {DEFAULT_CTX_SIZE}).",
     )
     parser.add_argument(
         "--flash-attn",
@@ -501,6 +609,19 @@ def set_parser_args(parser):
         "--cache-type-v",
         default="q8_0",
         help="KV cache V quantization type (default: q8_0).",
+    )
+    parser.add_argument(
+        "--fit",
+        dest="fit",
+        action="store_true",
+        default=True,
+        help="Add '-fit on' to the llama-server command (default).",
+    )
+    parser.add_argument(
+        "--no-fit",
+        dest="fit",
+        action="store_false",
+        help="Do not add '-fit on' to the llama-server command.",
     )
     parser.add_argument(
         "--n-gpu-layers",
@@ -558,6 +679,16 @@ def set_parser_args(parser):
         action="store_true",
         help="Remove model entries not present in the llama.cpp cache.",
     )
+    parser.add_argument(
+        "--use-model-settings",
+        action="store_true",
+        help="Load model mode defaults from a model settings YAML file.",
+    )
+    parser.add_argument(
+        "--model-settings-file",
+        default=str(default_model_settings_path()),
+        help="Path to model settings YAML (used with --use-model-settings).",
+    )
 
 
 class MyApp:
@@ -582,6 +713,8 @@ class MyApp:
         self.log = (lambda msg: print(msg, file=sys.stderr)) if self.args.verbose else (lambda _msg: None)
 
         self.hardware_profile = None
+        self.models_dir: Optional[Path] = None
+        self.model_settings_modes: Dict[str, Dict[str, ModelModeSettings]] = {}
 
         self.batch_arg = self.args.batch_size
         self.ubatch_arg = self.args.ubatch_size
@@ -631,6 +764,19 @@ class MyApp:
         if self.batch_arg == BATCH_AUTO or self.ubatch_arg == BATCH_AUTO:
             log(f"Auto batch settings for '{model_path.name}': -b {batch} -ub {ubatch} (profile: {profile.name}, model {model_size_gb:.1f} GB)")
         return batch, ubatch
+
+    def find_model_settings_modes(
+        self,
+        model_path: Path,
+        base_name: str,
+    ) -> tuple[Optional[str], Optional[Dict[str, ModelModeSettings]]]:
+        if self.models_dir is None or not self.model_settings_modes:
+            return None, None
+        for candidate in model_settings_candidates(self.models_dir, model_path, base_name):
+            modes = self.model_settings_modes.get(candidate)
+            if modes:
+                return candidate, modes
+        return None, None
 
     def make_model_entries(self, ggufs: List[Path]) -> Dict[str, dict]:
         args = self.args
@@ -692,7 +838,25 @@ class MyApp:
                 batch_size=batch_size,
                 ubatch_size=ubatch_size,
                 log_file=log_file,
+                fit=args.fit,
             )
+
+            matched_settings_name, matched_modes = self.find_model_settings_modes(model_path, base_name)
+            if matched_modes:
+                log(
+                    f"Adding model '{name}' with {len(matched_modes)} mode(s) from model settings key '{matched_settings_name}'."
+                )
+                for mode_name, mode_settings in matched_modes.items():
+                    mode_entry_name = f"{name}-{mode_name}"
+                    mode_thinking = mode_settings.thinking if thinking_optional else None
+                    entries[mode_entry_name] = {
+                        "cmd": build_cmd(
+                            thinking=mode_thinking,
+                            extra_args=mode_settings.extra_args,
+                            **cmd_kwargs,
+                        )
+                    }
+                continue
 
             if thinking_optional:
                 entries[name] = {"cmd": build_cmd(thinking=False, **cmd_kwargs)}
@@ -731,6 +895,20 @@ class MyApp:
         if not models_dir.is_dir():
             print(f"ERROR: models directory not found: {models_dir}", file=sys.stderr)
             return 2
+        self.models_dir = models_dir
+
+        if args.use_model_settings:
+            model_settings_file = Path(args.model_settings_file).expanduser()
+            if not model_settings_file.is_file():
+                print(f"ERROR: model settings file not found: {model_settings_file}", file=sys.stderr)
+                return 2
+            self.model_settings_modes = load_model_settings_modes(model_settings_file, log)
+            log(
+                f"Loaded model settings from {model_settings_file} "
+                f"({len(self.model_settings_modes)} model definitions with modes)."
+            )
+        else:
+            self.model_settings_modes = {}
 
         log(f"Scanning for .gguf models under: {models_dir}")
         ggufs = sorted(p for p in models_dir.rglob("*.gguf") if p.is_file())

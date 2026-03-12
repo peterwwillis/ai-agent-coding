@@ -1,6 +1,7 @@
 """Tests for llama-swap-config-gen.py."""
 from __future__ import annotations
 
+import argparse
 import struct
 import subprocess
 import sys
@@ -91,6 +92,25 @@ class TestParseFlashAttn:
             lcg.parse_flash_attn("maybe")
 
 
+class TestParserDefaults:
+    def _parse(self, argv=None):
+        parser = argparse.ArgumentParser()
+        lcg.set_parser_args(parser)
+        return parser.parse_args(argv or [])
+
+    def test_ctx_size_default(self):
+        args = self._parse()
+        assert args.ctx_size == 4096
+
+    def test_fit_default_enabled(self):
+        args = self._parse()
+        assert args.fit is True
+
+    def test_no_fit_disables(self):
+        args = self._parse(["--no-fit"])
+        assert args.fit is False
+
+
 # ---------------------------------------------------------------------------
 # Unit tests: build_cmd
 # ---------------------------------------------------------------------------
@@ -101,7 +121,7 @@ class TestBuildCmd:
             llama_server="llama-server",
             model_path=Path("/models/test.gguf"),
             thinking=None,
-            ctx_size=2048,
+            ctx_size=4096,
             flash_attn="on",
             cache_type_k="q8_0",
             cache_type_v="q8_0",
@@ -110,6 +130,7 @@ class TestBuildCmd:
             batch_size=None,
             ubatch_size=None,
             log_file=Path("/tmp/test.log"),
+            fit=True,
         )
         defaults.update(overrides)
         return lcg.build_cmd(**defaults)
@@ -135,6 +156,14 @@ class TestBuildCmd:
     def test_contains_model_path(self):
         result = self._call(model_path=Path("/my/model.gguf"))
         assert "/my/model.gguf" in str(result)
+
+    def test_fit_flag_by_default(self):
+        result = self._call()
+        assert "-fit on" in str(result)
+
+    def test_fit_flag_can_be_disabled(self):
+        result = self._call(fit=False)
+        assert "-fit on" not in str(result)
 
     def test_mmap_flag(self):
         assert "--mmap" in str(self._call(mmap=True))
@@ -311,6 +340,23 @@ class TestCLIStdout:
         cmd = str(data["models"]["test-model"]["cmd"])
         assert " \\\n" in cmd
 
+    def test_default_ctx_size_and_fit(self, tmp_models):
+        proc = self._run(tmp_models.parent, tmp_models)
+        assert proc.returncode == 0
+        y = YAML()
+        data = y.load(proc.stdout)
+        cmd = str(data["models"]["test-model"]["cmd"])
+        assert "--ctx-size 4096" in cmd
+        assert "-fit on" in cmd
+
+    def test_no_fit_option(self, tmp_models):
+        proc = self._run(tmp_models.parent, tmp_models, ["--no-fit"])
+        assert proc.returncode == 0
+        y = YAML()
+        data = y.load(proc.stdout)
+        cmd = str(data["models"]["test-model"]["cmd"])
+        assert "-fit on" not in cmd
+
     def test_thinking_model_gets_two_entries(self, tmp_models_thinking):
         proc = self._run(tmp_models_thinking.parent, tmp_models_thinking)
         assert proc.returncode == 0
@@ -319,6 +365,66 @@ class TestCLIStdout:
         models = data["models"]
         assert "thinker" in models
         assert "thinker-thinking" in models
+
+    def test_model_settings_modes_create_entries(self, tmp_path):
+        models = tmp_path / "models"
+        models.mkdir()
+        make_minimal_gguf(
+            models / "mode-model.gguf",
+            kv={"tokenizer.chat_template": gguf_string_value("{% if enable_thinking %}yes{% endif %}")},
+        )
+        settings = tmp_path / "model-settings.yml"
+        settings.write_text(
+            textwrap.dedent(
+                """\
+                thinking: false
+                models:
+                  mode-model:
+                    modes:
+                      general:
+                        temp: 0.7
+                        top_p: 0.8
+                      coder:
+                        thinking: true
+                        temp: 0.6
+                        top_k: 20
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        proc = self._run(
+            tmp_path,
+            models,
+            [
+                "--use-model-settings",
+                "--model-settings-file",
+                str(settings),
+            ],
+        )
+        assert proc.returncode == 0
+        y = YAML()
+        data = y.load(proc.stdout)
+        models_out = data["models"]
+        assert "mode-model-general" in models_out
+        assert "mode-model-coder" in models_out
+        general_cmd = str(models_out["mode-model-general"]["cmd"])
+        coder_cmd = str(models_out["mode-model-coder"]["cmd"])
+        assert "--temp 0.7" in general_cmd
+        assert "--top-p 0.8" in general_cmd
+        assert "\"enable_thinking\":false" in general_cmd
+        assert "--temp 0.6" in coder_cmd
+        assert "--top-k 20" in coder_cmd
+        assert "\"enable_thinking\":true" in coder_cmd
+
+    def test_model_settings_missing_file_error(self, tmp_models):
+        missing = tmp_models.parent / "missing-model-settings.yml"
+        proc = self._run(
+            tmp_models.parent,
+            tmp_models,
+            ["--use-model-settings", "--model-settings-file", str(missing)],
+        )
+        assert proc.returncode == 2
 
     def test_no_models_dir_error(self, tmp_path):
         proc = self._run(tmp_path, tmp_path / "nonexistent")

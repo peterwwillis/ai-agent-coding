@@ -98,9 +98,14 @@ way to reuse the models across tools:
    $ ./llama-swap-config-gen.py --verbose --prune-missing
    ```
 
+   If you want per-model mode presets from `models/model-settings.yml`, add:
+
+   ```bash
+   $ ./llama-swap-config-gen.py --verbose --prune-missing --use-model-settings
+   ```
+
 4. If it's not already running, run `llama-swap`:
 
    ```bash
    $ ./llama-swap.sh
    ```
-
