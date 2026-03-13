@@ -27,3 +27,17 @@ mv -v "$tmpd/usr/share/zsh/vendor-completions/_sgpt" ~/.zsh_completion.d/
 chmod 755 ~/.local/bin/sgpt
 
 rm -rf "$tmpf" "$tmpd"
+
+echo ""
+
+echo "SGPT installed!"
+echo ""
+echo "Now run:"
+echo "    sgpt config init"
+echo ""
+echo "Then edit ~/.config/sgpt/config.yaml with the model you want to use."
+echo ""
+echo "Finally, to use a local Ollama, add these to your shell startup script:"
+echo "    export OPENAI_BASE_URL=http://localhost:11434/v1"
+echo "    export OPENAI_API_KEY=\"(none)\""
+
