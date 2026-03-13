@@ -47,7 +47,7 @@ info() { echo "INFO:  $*"; }
 dbg()  { [[ "${VERBOSE:-0}" == "1" ]] && echo "DEBUG: $*" || true; }
 
 usage() {
-    sed -n '/^# Usage:/,/^[^#]/{ /^[^#]/d; s/^# \{0,3\}//; p }' "$0"
+    sed -E -n '/^# Usage:/,/^[^#]/{ /^[^#]/d; s/^# \{0,3\}//; p }' "$0"
     exit 0
 }
 
