@@ -7,7 +7,7 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.12"
 ruamel-yaml = "*"
 pyyaml = "*"
 chromadb = ">=1.0"
