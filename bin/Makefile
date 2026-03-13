@@ -2,7 +2,7 @@
 .PHONY: test update-cache poetry-install ruff-format
 
 update-cache: poetry-install
-	./ollama-to-llamacpp-modelcache.sh -o /usr/share/ollama/.ollama/models
+	./ollama-to-llamacpp-modelcache.sh
 	poetry run ./llama-swap-config-gen.py --verbose --prune-missing
 
 test: poetry-install
