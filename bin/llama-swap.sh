@@ -10,6 +10,6 @@ LLAMA_SWAP_PORT="11400"
 mkdir -p $HOME/.config/llama-swap
 
 llama-swap \
-    -config $HOME/.config/llama-swap/config.yaml \
+    -config "$HOME/.config/llama-swap/config.yaml" \
     -watch-config \
     -listen "$LLAMA_SWAP_ADDR:$LLAMA_SWAP_PORT"
