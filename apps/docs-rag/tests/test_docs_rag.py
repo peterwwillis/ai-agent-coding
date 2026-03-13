@@ -1,4 +1,4 @@
-"""Tests for linux-doc-rag.py.
+"""Tests for docs-rag.py.
 
 Covers all pure-Python functions (no Ollama, no ChromaDB required).
 Tests that depend on external services are skipped with pytest.mark.skip
@@ -20,7 +20,7 @@ import pytest
 
 # Allow importing the script as a module (it has a hyphen in the name).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-rag = importlib.import_module("linux-doc-rag")
+rag = importlib.import_module("docs-rag")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -317,6 +317,59 @@ class TestRenderManPage:
         result = rag.render_man_page(gz)
         # Either None or empty string is acceptable
         assert not result  # falsy
+
+    def test_falls_back_to_mandoc_when_groff_missing(self, tmp_path):
+        src = b".TH FIND 1\n.SH NAME\nfind \\- search for files\n"
+        plain = tmp_path / "find.1"
+        plain.write_bytes(src)
+
+        def _run_side_effect(cmd, input=None, capture_output=None, timeout=None):
+            if cmd[0] == "groff":
+                raise FileNotFoundError("groff missing")
+            if cmd[0] == "mandoc":
+                proc = MagicMock()
+                proc.returncode = 0
+                proc.stdout = b"NAME\nfind - search for files\n"
+                return proc
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        with patch("subprocess.run", side_effect=_run_side_effect):
+            text = rag.render_man_page(plain)
+        assert text is not None
+        assert "find" in text.lower()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Platform-specific defaults
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestPlatformDefaults:
+    def test_macos_man_dirs_include_homebrew(self):
+        dirs = rag.default_man_dirs("darwin")
+        assert "/usr/share/man" in dirs
+        assert "/opt/homebrew/share/man" in dirs
+
+    def test_macos_info_dirs_include_homebrew(self):
+        dirs = rag.default_info_dirs("darwin")
+        assert "/opt/homebrew/share/info" in dirs
+
+    def test_linux_man_dirs_default(self):
+        assert rag.default_man_dirs("linux") == ["/usr/share/man"]
+
+    def test_linux_db_path_honors_xdg_data_home(self):
+        p = rag.default_db_path("linux", xdg_data_home="/tmp/data-home")
+        assert p == Path("/tmp/data-home/docs-rag/chroma")
+
+    def test_linux_config_path_honors_xdg_config_home(self):
+        p = rag.default_config_path("linux", xdg_config_home="/tmp/config-home")
+        assert p == Path("/tmp/config-home/docs-rag/config.yaml")
+
+    def test_macos_paths_use_library_application_support(self):
+        db_path = rag.default_db_path("darwin")
+        cfg_path = rag.default_config_path("darwin")
+        assert "Library/Application Support/docs-rag/chroma" in db_path.as_posix()
+        assert "Library/Application Support/docs-rag/config.yaml" in cfg_path.as_posix()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-test: test-linux-doc-rag
+test: test-docs-rag
 
-test-linux-doc-rag:
-	make -C linux-doc-rag/ test
+test-docs-rag:
+	make -C docs-rag/ test

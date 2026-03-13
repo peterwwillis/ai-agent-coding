@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""linux-doc-rag.py – RAG agent for Linux/Ubuntu documentation.
+"""docs-rag.py – RAG agent for local system documentation.
 
-Ingest Ubuntu 24.04 man pages into a local ChromaDB vector store, then
-answer questions about Linux tools using a local LLM (via Ollama).
+Ingest man/info/doc pages into a local ChromaDB vector store, then answer
+questions about command-line tools using a local LLM (via Ollama).
 No internet access or API keys required.
 
 Prerequisites
@@ -15,19 +15,19 @@ Prerequisites
 Usage examples
 ──────────────
   # Index all installed man pages (first run, may take several minutes):
-  python linux-doc-rag.py ingest
+  python docs-rag.py ingest
 
   # Index only specific man-page sections (1=user cmds, 8=admin cmds):
-  python linux-doc-rag.py ingest --sections 1 8
+  python docs-rag.py ingest --sections 1 8
 
   # Ask a one-shot question:
-  python linux-doc-rag.py query "How do I find files modified in the last 24 hours?"
+  python docs-rag.py query "How do I find files modified in the last 24 hours?"
 
   # Interactive session:
-  python linux-doc-rag.py query --interactive
+  python docs-rag.py query --interactive
 
   # Show retrieved source chunks alongside the answer:
-  python linux-doc-rag.py query --show-sources "How do I list open ports?"
+  python docs-rag.py query --show-sources "How do I list open ports?"
 """
 from __future__ import annotations
 
@@ -47,19 +47,65 @@ from typing import Dict, Iterator, List, Optional, Tuple
 # Defaults
 # ─────────────────────────────────────────────────────────────────────────────
 
-DEFAULT_DB_PATH = Path.home() / ".local" / "share" / "linux-doc-rag" / "chroma"
-DEFAULT_MAN_DIRS: List[str] = ["/usr/share/man"]
-DEFAULT_DOC_DIRS: List[str] = ["/usr/share/doc"]
-DEFAULT_INFO_DIRS: List[str] = ["/usr/share/info"]
+APP_NAME = "docs-rag"
+APP_DISPLAY_NAME = "Docs RAG"
+
+
+def _is_macos(platform_name: Optional[str] = None) -> bool:
+    return (platform_name or sys.platform) == "darwin"
+
+
+def default_db_path(
+    platform_name: Optional[str] = None,
+    xdg_data_home: Optional[str] = None,
+) -> Path:
+    if _is_macos(platform_name):
+        return Path.home() / "Library" / "Application Support" / APP_NAME / "chroma"
+    data_home = Path(
+        xdg_data_home or os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local" / "share"))
+    )
+    return data_home / APP_NAME / "chroma"
+
+
+def default_config_path(
+    platform_name: Optional[str] = None,
+    xdg_config_home: Optional[str] = None,
+) -> Path:
+    if _is_macos(platform_name):
+        return Path.home() / "Library" / "Application Support" / APP_NAME / "config.yaml"
+    config_home = Path(
+        xdg_config_home or os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+    )
+    return config_home / APP_NAME / "config.yaml"
+
+
+def default_man_dirs(platform_name: Optional[str] = None) -> List[str]:
+    if _is_macos(platform_name):
+        return ["/usr/share/man", "/opt/homebrew/share/man", "/usr/local/share/man"]
+    return ["/usr/share/man"]
+
+
+def default_doc_dirs(platform_name: Optional[str] = None) -> List[str]:
+    if _is_macos(platform_name):
+        return ["/usr/share/doc", "/opt/homebrew/share/doc", "/usr/local/share/doc"]
+    return ["/usr/share/doc"]
+
+
+def default_info_dirs(platform_name: Optional[str] = None) -> List[str]:
+    if _is_macos(platform_name):
+        return ["/opt/homebrew/share/info", "/usr/local/share/info", "/usr/share/info"]
+    return ["/usr/share/info"]
+
+
+DEFAULT_DB_PATH = default_db_path()
+DEFAULT_MAN_DIRS: List[str] = default_man_dirs()
+DEFAULT_DOC_DIRS: List[str] = default_doc_dirs()
+DEFAULT_INFO_DIRS: List[str] = default_info_dirs()
 DEFAULT_EMBED_MODEL = "nomic-embed-text"
 DEFAULT_CHAT_MODEL = "llama3.2"
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
-DEFAULT_COLLECTION = "linux-man-pages"
-DEFAULT_CONFIG_PATH = (
-    Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
-    / "linux-doc-rag"
-    / "config.yaml"
-)
+DEFAULT_COLLECTION = "docs-pages"
+DEFAULT_CONFIG_PATH = default_config_path()
 
 CHUNK_SIZE = 800       # characters per chunk
 CHUNK_OVERLAP = 150    # overlap between consecutive chunks
@@ -70,8 +116,8 @@ MAX_CONTEXT_CHARS = 8000  # truncate total context if very large
 ALL_SECTIONS: List[str] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "n", "l"]
 
 SYSTEM_PROMPT = (
-    "You are an expert Linux system administrator and developer. "
-    "You have access to Linux man pages and official documentation. "
+    "You are an expert Unix system administrator and developer. "
+    "You have access to local man pages and official documentation. "
     "When answering questions, use the provided documentation excerpts to give "
     "accurate, concrete answers with command examples where appropriate. "
     "If the documentation does not cover a specific point, say so clearly. "
@@ -90,12 +136,12 @@ def load_config(path: Path) -> Dict:
     parsed.  Top-level keys hold shared settings; the optional ``ingest`` and
     ``query`` sub-dicts hold subcommand-specific overrides.
 
-    Example config (``~/.config/linux-doc-rag/config.yaml``)::
+    Example config (``~/.config/docs-rag/config.yaml``)::
 
-        db_path: /data/linux-doc-rag/chroma
+        db_path: /data/docs-rag/chroma
         embed_model: mxbai-embed-large
         ollama_url: http://192.168.1.10:11434
-        collection: ubuntu-docs
+        collection: docs-pages
 
         ingest:
           man_dirs:
@@ -212,6 +258,20 @@ def render_man_page(path: Path) -> Optional[str]:
             timeout=30,
         )
         if result.returncode == 0:
+            text = result.stdout.decode("utf-8", errors="replace")
+            return _strip_ansi(text).strip() or None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # On macOS, `mandoc` is commonly available even when `groff` is not.
+    try:
+        result = subprocess.run(
+            ["mandoc", "-T", "ascii", "-"],
+            input=raw,
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode == 0 and result.stdout:
             text = result.stdout.decode("utf-8", errors="replace")
             return _strip_ansi(text).strip() or None
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -725,7 +785,7 @@ def cmd_query(args) -> None:
     except Exception:
         raise SystemExit(
             f"ERROR: Collection '{collection_name}' not found in {db_path}.\n"
-            "  Run 'linux-doc-rag.py ingest' first."
+            "  Run 'docs-rag.py ingest' first."
         )
 
     def answer(question: str) -> None:
@@ -774,7 +834,7 @@ def cmd_query(args) -> None:
     if args.question:
         answer(" ".join(args.question))
     elif args.interactive:
-        print("Linux Doc RAG – type your question, or 'exit' / Ctrl-D to quit.\n")
+        print(f"{APP_DISPLAY_NAME} – type your question, or 'exit' / Ctrl-D to quit.\n")
         while True:
             try:
                 question = input("Question: ").strip()
@@ -835,8 +895,8 @@ def make_parser(config: Optional[Dict] = None) -> argparse.ArgumentParser:
     query_cfg: Dict = cfg.get("query", {}) if isinstance(cfg.get("query"), dict) else {}
 
     parser = argparse.ArgumentParser(
-        prog="linux-doc-rag.py",
-        description="RAG agent for Linux/Ubuntu documentation (man pages).",
+        prog="docs-rag.py",
+        description="RAG agent for local man/info/doc documentation.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -908,7 +968,7 @@ def make_parser(config: Optional[Dict] = None) -> argparse.ArgumentParser:
     query_p = subs.add_parser(
         "query",
         parents=[shared],
-        help="Ask a question about Linux tools",
+        help="Ask a question about system tools",
         description="Retrieve relevant documentation excerpts and answer with a local LLM.",
     )
     query_p.add_argument(

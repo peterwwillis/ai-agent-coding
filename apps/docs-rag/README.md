@@ -1,7 +1,7 @@
 
-## Linux documentation RAG agent (`linux-doc-rag.py`)
+## Local documentation RAG agent (`docs-rag.py`)
 
-Ask natural-language questions about Linux tools and get accurate answers
+Ask natural-language questions about system tools and get accurate answers
 sourced directly from locally installed man pages.  The agent uses
 **Retrieval-Augmented Generation (RAG)**: man pages are split into chunks,
 embedded into a local vector database (ChromaDB), and at query time the most
@@ -22,29 +22,30 @@ ollama pull llama3.2          # (or any other chat model you prefer)
 ```bash
 # 1. Index all installed man pages (runs once; may take several minutes for
 #    large installations – progress is printed every 200 pages).
-./linux-doc-rag.py ingest
+./docs-rag.py ingest
 
 # 2. Ask a question:
-./linux-doc-rag.py query "How do I find all files modified in the last 24 hours?"
+./docs-rag.py query "How do I find all files modified in the last 24 hours?"
 
 # 3. Interactive mode:
-./linux-doc-rag.py query --interactive
+./docs-rag.py query --interactive
 
 # 4. Show which man-page sections were used to build the answer:
-./linux-doc-rag.py query --show-sources "How do I change file ownership recursively?"
+./docs-rag.py query --show-sources "How do I change file ownership recursively?"
 ```
 
 ### Ingest options
 
 | Flag | Default | Description |
 |---|---|---|
-| `--man-dirs DIR …` | `/usr/share/man` | Man page directories to scan |
-| `--doc-dirs DIR …` | *(none)* | Additional doc dirs, e.g. `/usr/share/doc` (README, CHANGELOG, *.md) |
+| `--man-dirs DIR …` | platform-specific | Man page directories to scan (`/usr/share/man` plus common Homebrew paths on macOS) |
+| `--doc-dirs DIR …` | platform-specific | Documentation directories to scan (`/usr/share/doc` plus common Homebrew doc paths on macOS) |
+| `--info-dirs DIR …` | platform-specific | GNU info directories to scan (`/usr/share/info` plus common Homebrew info paths on macOS) |
 | `--sections N …` | all | Only index specific sections (e.g. `--sections 1 8`) |
 | `--force` | off | Re-embed already-indexed entries |
 | `--embed-model MODEL` | `nomic-embed-text` | Ollama embedding model |
 | `--ollama-url URL` | `http://localhost:11434` | Ollama base URL |
-| `--db-path DIR` | `~/.local/share/linux-doc-rag/chroma` | ChromaDB storage path |
+| `--db-path DIR` | Linux: `~/.local/share/docs-rag/chroma`; macOS: `~/Library/Application Support/docs-rag/chroma` | ChromaDB storage path |
 | `--batch-size N` | `50` | Write batch size |
 
 ### Query options
@@ -57,14 +58,14 @@ ollama pull llama3.2          # (or any other chat model you prefer)
 | `--show-sources` | off | Print the retrieved source chunks |
 | `--embed-model MODEL` | `nomic-embed-text` | Ollama embedding model |
 | `--ollama-url URL` | `http://localhost:11434` | Ollama base URL |
-| `--db-path DIR` | `~/.local/share/linux-doc-rag/chroma` | ChromaDB storage path |
+| `--db-path DIR` | Linux: `~/.local/share/docs-rag/chroma`; macOS: `~/Library/Application Support/docs-rag/chroma` | ChromaDB storage path |
 
 ### Tips
 
 * **Section filtering** dramatically reduces ingest time.  Sections 1 (user
   commands) and 8 (admin commands) cover the most useful material:
   ```bash
-  ./linux-doc-rag.py ingest --sections 1 8
+  ./docs-rag.py ingest --sections 1 8
   ```
 * **Resume support**: re-running `ingest` skips already-indexed chunks, so
   you can safely interrupt and restart.
