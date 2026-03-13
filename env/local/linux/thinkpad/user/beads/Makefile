@@ -1,9 +1,8 @@
 GIT_ROOTDIR := $(shell git rev-parse --show-toplevel)
 
 install: install-dolt
-	if ! command -v bd >/dev/null ; then \
-		$(GIT_ROOTDIR)/bin/beads-install.sh ; \
-	fi
+	command -v bd || \
+		$(GIT_ROOTDIR)/bin/beads-install.sh
 
 install-dolt:
-	make -C ../dolt/ install
+	command -v dolt || make -C ../dolt/ install
