@@ -1,22 +1,22 @@
-name: bin tests
+name: Run tests on app changes
 
 on:
   push:
     paths:
       - 'bin/**'
+      - 'apps/**'
   pull_request:
     paths:
       - 'bin/**'
+      - 'apps/**'
 
 jobs:
-  test:
+
+  make-test:
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
-    defaults:
-      run:
-        working-directory: bin
 
     steps:
       - uses: actions/checkout@v4
