@@ -1,3 +1,1 @@
-install:
-	mkdir -p ~/.config/llama-swap
-	cp -f config.yaml ~/.config/llama-swap/
+../../../../../../make/llama-swap.Makefile
