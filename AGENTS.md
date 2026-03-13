@@ -48,6 +48,12 @@ cp -rf source dest          # NOT: cp -r source dest
 - Agent-optimized: JSON output, ready work detection, discovered-from links
 - Prevents duplicate tracking systems and confusion
 
+### Installation
+
+```bash
+make -C env/local/linux/thinkpad/user/beads/ install
+```
+
 ### Quick Start
 
 **Check for ready work:**
