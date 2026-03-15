@@ -34,6 +34,25 @@ way to reuse the models across tools:
 
 4. If it's not already running, run `llama-swap`:
 
-   ```bash
-   $ ./llama-swap.sh
-   ```
+    ```bash
+    $ ./llama-swap.sh
+    ```
+
+## Estimating llama.cpp parameters
+
+Use `llama-cpp-params.py` to estimate `llama.cpp` flags based on your model and
+hardware. The script inspects GGUF metadata (layers, heads, embedding size),
+accounts for context/batch sizes and KV cache quantization, and estimates how
+many GPU layers will fit in your VRAM (including optional MoE CPU offsets).
+
+```bash
+$ ./llama-cpp-params.py \
+    --model-path /models/mixtral.gguf \
+    --vram 24GB \
+    --ctx-size 8192 \
+    --batch-size 2048 \
+    --ubatch-size 512 \
+    --cache-type-k q8_0 \
+    --cache-type-v q8_0 \
+    --moe-cpu-offset 4
+```
