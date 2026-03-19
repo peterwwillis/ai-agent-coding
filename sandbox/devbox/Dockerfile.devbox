@@ -59,6 +59,8 @@ RUN install -dm 755 /etc/apt/keyrings \
 # Ensure mise shims are on PATH for non-interactive shells
 ENV PATH="/root/.local/share/mise/shims:/root/.local/bin:${PATH}"
 
+COPY 
+
 # Install language runtimes via mise
 RUN mise install
 

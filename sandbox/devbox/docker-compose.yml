@@ -1,8 +1,9 @@
 services:
   devbox:
     image: devbox:latest
+    container_name: devbox
     build:
-      context: .
+      context: ../../
       dockerfile: Dockerfile.devbox
     volumes:
       - ./:/workspace

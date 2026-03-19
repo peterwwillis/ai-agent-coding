@@ -1,1 +1,2 @@
 DOCKER_NETWORK_NAME = dind-lab
+DOCKER_CONTAINER_NAME = devbox
