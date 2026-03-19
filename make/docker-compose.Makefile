@@ -9,6 +9,7 @@ all:
 	@echo "    network				Makes network $(DOCKER_NETWORK_NAME)"
 	@echo "    up					Runs 'docker compose up'"
 	@echo "    build-devbox			Runs 'docker build -f Dockerfile.devbox'"
+	@echo "    shell				Runs 'docker exec -it devbox bash'"
 
 network:
 	if [ -n "$(DOCKER_NETWORK_NAME)" ] ; then \
