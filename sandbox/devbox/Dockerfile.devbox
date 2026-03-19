@@ -72,5 +72,16 @@ RUN DEBUG=1 make -C env/local/linux install
 # ---- Playwright browser path (browsers provided via pw service) ----
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-WORKDIR /workspace
+ARG DEVBOX_USER=devbox
+ARG DEVBOX_UID=1001
+ARG DEVBOX_GID=1001
+
+RUN groupadd -g ${DEVBOX_GID} ${DEVBOX_USER} || true && \
+    useradd -l -u ${DEVBOX_UID} -g ${DEVBOX_GID} -m ${DEVBOX_USER}
+
+#WORKDIR /workspace
+
+WORKDIR /home/${DEVBOX_USER}
+USER ${DEVBOX_USER}
+
 CMD ["/bin/bash"]

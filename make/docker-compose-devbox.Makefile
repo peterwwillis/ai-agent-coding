@@ -20,7 +20,10 @@ network:
 	fi
 
 up: network
-	docker compose up -d --remove-orphans
+	export DEVBOX_USER="$$(id -un)" ; \
+	export DEVBOX_UID="$$(id -u)" ; \
+	export DEVBOX_GID="$$(id -g)" ; \
+	docker compose up -d --remove-orphans --build
 
 down:
 	docker compose down
@@ -29,5 +32,15 @@ shell: up
 	docker run --rm -it $(DOCKER_CONTAINER_NAME) bash
 
 build-devbox:
-	docker build --progress=plain -f Dockerfile.devbox -t devbox:latest $${DOCKER_BUILD_CONTEXT:-.}
+	export DEVBOX_USER="$$(id -un)" ; \
+	export DEVBOX_UID="$$(id -u)" ; \
+	export DEVBOX_GID="$$(id -g)" ; \
+	docker build \
+		--progress=plain \
+		-f Dockerfile.devbox \
+		--build-arg DEVBOX_USER="$$DEVBOX_USER" \
+		--build-arg DEVBOX_UID="$$DEVBOX_UID" \
+		--build-arg DEVBOX_GID="$$DEVBOX_GID" \
+		-t devbox:latest \
+		$${DOCKER_BUILD_CONTEXT:-.}
 
