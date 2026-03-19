@@ -1,5 +1,3 @@
-LLAMASWAP_VERSION ?= 197
-export LLAMASWAP_VERSION
 
 GIT_ROOTDIR := $(shell git rev-parse --show-toplevel)
 

@@ -8,12 +8,15 @@ set -eu
 
 if [ -z "${LLAMASWAP_VERSION:-}" ] ; then
     LLAMASWAP_VERSION="$(curl --silent "https://api.github.com/repos/mostlygeek/llama-swap/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')"
+    LLAMASWAP_VERSION="${LLAMASWAP_VERSION#v}"
 fi
 
 mkdir -p ~/.local/bin
 
 arch="$(uname -m)"
 os="$( uname -s | tr '[:upper:]' '[:lower:]' )"
+
+[ "$arch" = "x86_64" ] && arch="amd64"
 
 tmpf="$(mktemp)"
 curl -o "$tmpf" -fSL "https://github.com/mostlygeek/llama-swap/releases/download/v${LLAMASWAP_VERSION}/llama-swap_${LLAMASWAP_VERSION}_${os}_${arch}.tar.gz"

@@ -30,7 +30,7 @@ install-tools:
 	for tool in $(MISE_INSTALL_TOOLS) ; do \
 		mise use -g $$tool ; \
 	done
-	set -eux ; if [ -r .tool-versions ] ; then \
+	set -ux ; if [ -r .tool-versions ] ; then \
 		cp -a -f .tool-versions ~/ && \
 		cd ~ && \
 		mise install ; \

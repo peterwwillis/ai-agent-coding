@@ -36,6 +36,7 @@ RUN apt-get update && \
         python3-pip \
         python3-venv \
         ripgrep \
+        software-properties-common \
         sqlite3 \
         strace \
         sudo \
@@ -46,6 +47,7 @@ RUN apt-get update && \
         xz-utils \
         yq \
         zip \
+        zstd \
   && rm -rf /var/lib/apt/lists/*
 
 RUN install -dm 755 /etc/apt/keyrings \
@@ -59,10 +61,13 @@ RUN install -dm 755 /etc/apt/keyrings \
 # Ensure mise shims are on PATH for non-interactive shells
 ENV PATH="/root/.local/share/mise/shims:/root/.local/bin:${PATH}"
 
-COPY 
+COPY . /src/ai-agent-coding
 
-# Install language runtimes via mise
-RUN mise install
+# Install all the Linux stuff
+ARG CACHEBUST=3
+WORKDIR /src/ai-agent-coding
+RUN ls -la ; pwd
+RUN DEBUG=1 make -C env/local/linux install
 
 # ---- Playwright browser path (browsers provided via pw service) ----
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright

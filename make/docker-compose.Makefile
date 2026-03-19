@@ -2,6 +2,8 @@
 # Add a DOCKER_NETWORK_NAME= to Makefile.inc to create a docker network
 -include Makefile.inc
 
+export DOCKER_NETWORK_NAME DOCKER_CONTAINER_NAME DOCKER_BUILD_CONTEXT
+
 all:
 	@echo "Targets:"
 	@echo "    network				Makes network $(DOCKER_NETWORK_NAME)"
@@ -25,6 +27,6 @@ down:
 shell: up
 	docker run --rm -it $(DOCKER_CONTAINER_NAME) bash
 
-docker-build-devbox:
-	docker build -f Dockerfile.devbox -t devbox:latest .
+build-devbox:
+	docker build --progress=plain -f Dockerfile.devbox -t devbox:latest $${DOCKER_BUILD_CONTEXT:-.}
 
