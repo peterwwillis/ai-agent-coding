@@ -1,0 +1,38 @@
+services:
+  android-emulator:
+    image: budtmo/docker-android:emulator_14.0
+    privileged: true
+    devices:
+      - /dev/kvm
+    environment:
+      - EMULATOR_DEVICE=Samsung Galaxy S10
+      - WEB_VNC=true
+    networks:
+      - dind-lab
+    ports:
+      - "6080:6080"
+      - "5554:5554"
+      - "5555:5555"
+    volumes:
+      - android-data:/home/androidusr
+    shm_size: "2gb"
+
+#  app:
+#    image: node:22
+#    working_dir: /workspace
+#    volumes:
+#      - ./:/workspace
+#    networks:
+#      - dind-lab
+#    command: >
+#      /bin/sh -lc "npm ci && npm run dev -- --host 0.0.0.0 --port 5173"
+#    ports:
+#      - "5173:5173"
+
+networks:
+  dind-lab:
+    external: true
+    name: dind-lab
+
+volumes:
+  android-data:

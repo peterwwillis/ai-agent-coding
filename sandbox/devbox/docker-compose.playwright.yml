@@ -1,0 +1,16 @@
+services:
+  pw:
+    image: mcr.microsoft.com/playwright:v1.49.0-noble
+    user: pwuser
+    init: true
+    ipc: host
+    shm_size: "2gb"
+    networks:
+      - dind-lab
+    command: >
+      /bin/sh -lc "npx -y playwright@1.49.0 run-server --port 3000 --host 0.0.0.0"
+
+networks:
+  dind-lab:
+    external: true
+    name: dind-lab

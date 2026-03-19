@@ -1,0 +1,21 @@
+services:
+  devbox:
+    image: devbox:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.devbox
+    volumes:
+      - ./:/workspace
+    working_dir: /workspace
+    tty: true
+    stdin_open: true
+    networks:
+      - dind-lab
+    environment:
+      # Playwright Test will connect to the remote browser server
+      - PW_TEST_CONNECT_WS_ENDPOINT=ws://pw:3000/
+
+networks:
+  dind-lab:
+    external: true
+    name: dind-lab
