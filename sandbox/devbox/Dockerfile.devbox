@@ -61,13 +61,17 @@ RUN install -dm 755 /etc/apt/keyrings \
 # Ensure mise shims are on PATH for non-interactive shells
 ENV PATH="/root/.local/share/mise/shims:/root/.local/bin:${PATH}"
 
-COPY . /src/ai-agent-coding
+# Copy files from ai-agent-coding repo so we can install software with it
+COPY bin /src/ai-agent-coding/bin
+COPY env /src/ai-agent-coding/env
+COPY make /src/ai-agent-coding/make
+# copy .git so tools can find GIT_ROOTDIR
+COPY .git /src/ai-agent-coding/.git
 
-# Install all the Linux stuff
-ARG CACHEBUST=3
 WORKDIR /src/ai-agent-coding
-RUN ls -la ; pwd
-RUN DEBUG=1 make -C env/local/linux install
+
+# Removing  /var/lib/apt/lists/* makes almost no difference in next step
+RUN ls -lahR ; pwd ; DEBUG=1 make -C env/local/linux install
 
 # ---- Playwright browser path (browsers provided via pw service) ----
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
@@ -76,12 +80,14 @@ ARG DEVBOX_USER=devbox
 ARG DEVBOX_UID=1001
 ARG DEVBOX_GID=1001
 
-RUN groupadd -g ${DEVBOX_GID} ${DEVBOX_USER} || true && \
-    useradd -l -u ${DEVBOX_UID} -g ${DEVBOX_GID} -m ${DEVBOX_USER}
-
-#WORKDIR /workspace
+RUN groupadd -g ${DEVBOX_GID} ${DEVBOX_USER} || true \
+    && useradd -l -u ${DEVBOX_UID} -g ${DEVBOX_GID} -m ${DEVBOX_USER}
 
 WORKDIR /home/${DEVBOX_USER}
+
+# Set default password, impossible to crack
+RUN echo "${DEVBOX_USER}:$(echo "JDYkTjlZNTZycXcyeEVnMnBtbSROeUVOcDFud016TnIyWE92TzRoQ2dlMlg4bXA0cno1enZwTU8zMkFDR2hjVnFCdlBaNFZKZ3RUbTlmRFRzRmw4NU5od1ZlbGhPWG1XSzguNWlscnNFLw==" | base64 -d)" | chpasswd -e
+
 USER ${DEVBOX_USER}
 
 CMD ["/bin/bash"]
