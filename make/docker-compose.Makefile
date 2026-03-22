@@ -1,5 +1,5 @@
 
-.PHONY: up down build shell
+.PHONY: up down run shell ps build network
 
 ifeq ($(OS),Windows_NT)
 	TARGETOS := windows
@@ -10,12 +10,13 @@ else
 endif
 
 
-NETWORK_TARGET := network
 UP_TARGET := up
 DOWN_TARGET := down
+RUN_TARGET := run
 SHELL_TARGET := shell
 PS_TARGET := ps
 BUILD_TARGET := build
+NETWORK_TARGET := network
 
 
 # Add a DOCKER_NETWORK_NAME= to Makefile.inc to create a docker network
@@ -36,12 +37,13 @@ all:
 	@echo "Targets:"
 	@echo "    up					Runs 'docker compose up'"
 	@echo "    down				Runs 'docker compose down'"
-	@echo "    network				Makes network $(DOCKER_NETWORK_NAME)"
-	@echo "    build				Runs 'docker build -f $(DOCKERFILE)'"
+	@echo "    run				Runs 'docker run --rm -it $(DOCKER_CONTAINER_NAME)'"
 	@echo "    shell				Runs 'docker exec -it $(DOCKER_CONTAINER_NAME) bash'"
 	@echo "    ps					Runs 'docker compose ps'"
+	@echo "    build				Runs 'docker build -f $(DOCKERFILE)'"
+	@echo "    network				Makes network $(DOCKER_NETWORK_NAME)"
 
-$(NETWORK_TARGET):
+network:
 	if [ -n "$(DOCKER_NETWORK_NAME)" ] ; then \
 		network_id="$$(docker network ls -q --filter "name=$(DOCKER_NETWORK_NAME)" --filter driver=bridge)" ; \
 		if [ -z "$$network_id" ] ; then \
@@ -49,25 +51,28 @@ $(NETWORK_TARGET):
 		fi ; \
 	fi
 
-$(UP_TARGET): network
+up: $(NETWORK_TARGET)
 	export USER="$$(id -un)" ; \
 	export UID="$$(id -u)" ; \
 	export GID="$$(id -g)" ; \
-	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) up -d --remove-orphans --build $(DOCKER_COMPOSE_UP_ARGS)
+	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) up -d --remove-orphans $(DOCKER_COMPOSE_UP_ARGS)
 
-$(DOWN_TARGET):
+down:
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) down $(DOCKER_COMPOSE_DOWN_ARGS)
 
-#$(SHELL_TARGET): up
-#	docker $(DOCKER_ARGS) run --rm -it $(DOCKER_CONTAINER_NAME) bash
+run: up
+	docker $(DOCKER_ARGS) run --rm -it $(DOCKER_CONTAINER_NAME) $(DOCKER_COMPOSE_RUN_ARGS)
 
-$(SHELL_TARGET): up
+shell: up
 	docker $(DOCKER_ARGS) exec -it $(DOCKER_CONTAINER_NAME) bash
 
-$(PS_TARGET):
+ps:
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) ps
 
-$(BUILD_TARGET):
+build:
+	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) build $(DOCKER_COMPOSE_BUILD_ARGS)
+
+docker-build:
 	export USER="$$(id -un)" ; \
 	export UID="$$(id -u)" ; \
 	export GID="$$(id -g)" ; \
