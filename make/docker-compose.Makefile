@@ -56,10 +56,13 @@ $(UP_TARGET): network
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) up -d --remove-orphans --build $(DOCKER_COMPOSE_UP_ARGS)
 
 $(DOWN_TARGET):
-	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) down $(DOCKER_COMPOSE_ARGS)
+	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) down $(DOCKER_COMPOSE_DOWN_ARGS)
+
+#$(SHELL_TARGET): up
+#	docker $(DOCKER_ARGS) run --rm -it $(DOCKER_CONTAINER_NAME) bash
 
 $(SHELL_TARGET): up
-	docker $(DOCKER_ARGS) run --rm -it $(DOCKER_CONTAINER_NAME) bash
+	docker $(DOCKER_ARGS) exec -it $(DOCKER_CONTAINER_NAME) bash
 
 $(PS_TARGET):
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) ps
