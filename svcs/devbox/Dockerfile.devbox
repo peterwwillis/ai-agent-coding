@@ -76,18 +76,18 @@ RUN ls -lahR ; pwd ; DEBUG=1 make -C env/local/linux install
 # ---- Playwright browser path (browsers provided via pw service) ----
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-ARG DEVBOX_USER=devbox
-ARG DEVBOX_UID=1001
-ARG DEVBOX_GID=1001
+ARG USER=devbox
+ARG UID=1001
+ARG GID=1001
 
-RUN groupadd -g ${DEVBOX_GID} ${DEVBOX_USER} || true \
-    && useradd -l -u ${DEVBOX_UID} -g ${DEVBOX_GID} -m ${DEVBOX_USER}
+RUN groupadd -g ${GID} ${USER} || true \
+    && useradd -l -u ${UID} -g ${GID} -m ${USER}
 
-WORKDIR /home/${DEVBOX_USER}
+WORKDIR /home/${USER}
 
 # Set default password, impossible to crack
-RUN echo "${DEVBOX_USER}:$(echo "JDYkTjlZNTZycXcyeEVnMnBtbSROeUVOcDFud016TnIyWE92TzRoQ2dlMlg4bXA0cno1enZwTU8zMkFDR2hjVnFCdlBaNFZKZ3RUbTlmRFRzRmw4NU5od1ZlbGhPWG1XSzguNWlscnNFLw==" | base64 -d)" | chpasswd -e
+RUN echo "${USER}:$(echo "JDYkTjlZNTZycXcyeEVnMnBtbSROeUVOcDFud016TnIyWE92TzRoQ2dlMlg4bXA0cno1enZwTU8zMkFDR2hjVnFCdlBaNFZKZ3RUbTlmRFRzRmw4NU5od1ZlbGhPWG1XSzguNWlscnNFLw==" | base64 -d)" | chpasswd -e
 
-USER ${DEVBOX_USER}
+USER ${USER}
 
 CMD ["/bin/bash"]

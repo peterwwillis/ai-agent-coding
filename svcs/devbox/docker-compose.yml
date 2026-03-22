@@ -5,11 +5,11 @@ services:
     container_name: devbox
     build:
       context: ../../
-      dockerfile: sandbox/devbox/Dockerfile.devbox
+      dockerfile: svcs/devbox/Dockerfile.devbox
       args:
-        - DEVBOX_USER=${DEVBOX_USER:-devbox}
-        - DEVBOX_UID=${DEVBOX_UID:-1001}
-        - DEVBOX_GID=${DEVBOX_GID:-1001}
+        - USER=${USER:-devbox}
+        - UID=${UID:-1001}
+        - GID=${GID:-1001}
     volumes:
       - ./:/workspace
     working_dir: /workspace

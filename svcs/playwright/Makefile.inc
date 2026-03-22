@@ -1,0 +1,5 @@
+DOCKER_NETWORK_NAME = dind-lab
+DOCKER_CONTAINER_NAME = playwright
+DOCKER_CONTAINER_TAG = latest
+DOCKER_BUILD_CONTEXT = ../../
+#DOCKERFILE = Dockerfile.devbox
