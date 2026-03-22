@@ -10,9 +10,11 @@ else
 endif
 
 
+NETWORK_TARGET := network
 UP_TARGET := up
 DOWN_TARGET := down
 SHELL_TARGET := shell
+PS_TARGET := ps
 BUILD_TARGET := build
 
 
@@ -32,12 +34,14 @@ endif
 
 all:
 	@echo "Targets:"
-	@echo "    network				Makes network $(DOCKER_NETWORK_NAME)"
 	@echo "    up					Runs 'docker compose up'"
+	@echo "    down				Runs 'docker compose down'"
+	@echo "    network				Makes network $(DOCKER_NETWORK_NAME)"
 	@echo "    build				Runs 'docker build -f $(DOCKERFILE)'"
 	@echo "    shell				Runs 'docker exec -it $(DOCKER_CONTAINER_NAME) bash'"
+	@echo "    ps					Runs 'docker compose ps'"
 
-network:
+$(NETWORK_TARGET):
 	if [ -n "$(DOCKER_NETWORK_NAME)" ] ; then \
 		network_id="$$(docker network ls -q --filter "name=$(DOCKER_NETWORK_NAME)" --filter driver=bridge)" ; \
 		if [ -z "$$network_id" ] ; then \
@@ -56,6 +60,9 @@ $(DOWN_TARGET):
 
 $(SHELL_TARGET): up
 	docker $(DOCKER_ARGS) run --rm -it $(DOCKER_CONTAINER_NAME) bash
+
+$(PS_TARGET):
+	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) ps
 
 $(BUILD_TARGET):
 	export USER="$$(id -un)" ; \
