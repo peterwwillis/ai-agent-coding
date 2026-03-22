@@ -81,7 +81,7 @@ default_llama_cache_dir() {
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
-OLLAMA_DIR="${OLLAMA_MODELS:-${HOME}/.ollama/models}"
+OLLAMA_MODELS="${OLLAMA_MODELS:-${HOME}/.ollama/models}"
 DEST_DIR=""
 FORCE=0
 DRY_RUN=0
@@ -89,7 +89,7 @@ VERBOSE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -o|--ollama-dir)   OLLAMA_DIR="$2";  shift 2 ;;
+        -o|--ollama-dir)   OLLAMA_MODELS="$2";  shift 2 ;;
         -d|--dest-dir)     DEST_DIR="$2";    shift 2 ;;
         -f|--force)        FORCE=1;          shift   ;;
         -n|--dry-run)      DRY_RUN=1;        shift   ;;
@@ -104,13 +104,13 @@ if [[ -z "$DEST_DIR" ]]; then
     DEST_DIR="$(default_llama_cache_dir)"
 fi
 
-BLOBS_DIR="${OLLAMA_DIR}/blobs"
-MANIFESTS_DIR="${OLLAMA_DIR}/manifests"
+BLOBS_DIR="${OLLAMA_MODELS}/blobs"
+MANIFESTS_DIR="${OLLAMA_MODELS}/manifests"
 
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
-[[ -d "$OLLAMA_DIR" ]]    || die "Ollama models directory not found: $OLLAMA_DIR"
+[[ -d "$OLLAMA_MODELS" ]]    || die "Ollama models directory not found: $OLLAMA_MODELS"
 [[ -d "$BLOBS_DIR" ]]     || die "Ollama blobs directory not found: $BLOBS_DIR"
 [[ -d "$MANIFESTS_DIR" ]] || die "Ollama manifests directory not found: $MANIFESTS_DIR"
 
@@ -127,7 +127,7 @@ if [[ "$DRY_RUN" -eq 0 ]]; then
     mkdir -p "$DEST_DIR"
 fi
 
-info "Ollama models dir : $OLLAMA_DIR"
+info "Ollama models dir : $OLLAMA_MODELS"
 info "Destination dir   : $DEST_DIR"
 [[ "$DRY_RUN" -eq 1 ]] && info "(dry-run mode – no changes will be made)"
 echo ""
