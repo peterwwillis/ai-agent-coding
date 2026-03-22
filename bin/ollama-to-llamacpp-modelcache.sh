@@ -14,6 +14,7 @@
 #   -d, --dest-dir DIR      Destination directory for .gguf symlinks
 #                           (default: platform llama.cpp cache dir, or
 #                            $LLAMA_CACHE if set)
+#   -H, --hardlink          Create hardlinks instead of symlinks
 #   -f, --force             Overwrite existing symlinks
 #   -n, --dry-run           Print actions without making changes
 #   -v, --verbose           Show extra detail
@@ -83,6 +84,7 @@ default_llama_cache_dir() {
 # ---------------------------------------------------------------------------
 OLLAMA_MODELS="${OLLAMA_MODELS:-${HOME}/.ollama/models}"
 DEST_DIR=""
+HARDLINK=0
 FORCE=0
 DRY_RUN=0
 VERBOSE=0
@@ -91,6 +93,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -o|--ollama-dir)   OLLAMA_MODELS="$2";  shift 2 ;;
         -d|--dest-dir)     DEST_DIR="$2";    shift 2 ;;
+        -H|--hardlink)     HARDLINK=1;       shift   ;;
         -f|--force)        FORCE=1;          shift   ;;
         -n|--dry-run)      DRY_RUN=1;        shift   ;;
         -v|--verbose)      VERBOSE=1;        shift   ;;
@@ -220,6 +223,7 @@ EOF
         if [[ "$FORCE" -eq 1 ]]; then
             info "Replacing existing symlink: $link_name"
             if [[ "$DRY_RUN" -eq 0 ]]; then
+                # Leave existing symlinks as symlinks
                 ln -sf "$abs_blob" "$link_path"
             fi
             (( created++ )) || true
@@ -228,13 +232,36 @@ EOF
             (( skipped++ )) || true
         fi
     elif [[ -e "$link_path" ]]; then
-        echo "WARN:  $link_path exists and is not a symlink – skipping (use -f to overwrite)" >&2
-        (( skipped++ )) || true
+        if [[ "$HARDLINK" -eq 1 && "$link_path" -ef "$abs_blob" ]]; then
+            dbg "Hardlink already exists: $link_path"
+            (( skipped++ )) || true
+        elif [[ "$FORCE" -eq 1 ]]; then
+            info "Replacing existing file: $link_name"
+            if [[ "$DRY_RUN" -eq 0 ]]; then
+                if [[ "$HARDLINK" -eq 1 ]]; then
+                    ln -f "$abs_blob" "$link_path"
+                else
+                    ln -sf "$abs_blob" "$link_path"
+                fi
+            fi
+            (( created++ )) || true
+        else
+            echo "WARN:  $link_path exists and is not a symlink – skipping (use -f to overwrite)" >&2
+            (( skipped++ )) || true
+        fi
     else
-        info "Creating symlink: $link_name"
-        dbg "  -> $abs_blob"
-        if [[ "$DRY_RUN" -eq 0 ]]; then
-            ln -s "$abs_blob" "$link_path"
+        if [[ "$HARDLINK" -eq 1 ]]; then
+            info "Creating hardlink: $link_name"
+            dbg "  -> $abs_blob"
+            if [[ "$DRY_RUN" -eq 0 ]]; then
+                ln "$abs_blob" "$link_path"
+            fi
+        else
+            info "Creating symlink: $link_name"
+            dbg "  -> $abs_blob"
+            if [[ "$DRY_RUN" -eq 0 ]]; then
+                ln -s "$abs_blob" "$link_path"
+            fi
         fi
         (( created++ )) || true
     fi
