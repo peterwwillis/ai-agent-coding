@@ -1,8 +1,30 @@
 
+ifeq ($(OS),Windows_NT)
+	TARGETOS := windows
+else ifeq ($(shell uname -s),Linux)
+	TARGETOS := linux
+else
+	TARGETOS := macos
+endif
+
+
+UP_TARGET := up
+DOWN_TARGET := down
+SHELL_TARGET := shell
+BUILD_TARGET := build
+
+
 # Add a DOCKER_NETWORK_NAME= to Makefile.inc to create a docker network
 -include Makefile.inc
 
-export DOCKER_NETWORK_NAME DOCKER_CONTAINER_NAME DOCKER_BUILD_CONTEXT
+
+export DOCKER_NETWORK_NAME DOCKER_CONTAINER_NAME DOCKER_BUILD_CONTEXT DOCKER_COMPOSE_FILE
+
+
+ifneq ($(DOCKER_COMPOSE_FILE),)
+	DOCKER_COMPOSE_ARGS := -f $(DOCKER_COMPOSE_FILE)
+endif
+
 
 all:
 	@echo "Targets:"
@@ -19,19 +41,19 @@ network:
 		fi ; \
 	fi
 
-up: network
+$(UP_TARGET): network
 	export USER="$$(id -un)" ; \
 	export UID="$$(id -u)" ; \
 	export GID="$$(id -g)" ; \
-	docker compose up -d --remove-orphans --build
+	docker compose up -d --remove-orphans --build $(DOCKER_COMPOSE_ARGS)
 
-down:
-	docker compose down
+$(DOWN_TARGET):
+	docker compose down $(DOCKER_COMPOSE_ARGS)
 
-shell: up
+$(SHELL_TARGET): up
 	docker run --rm -it $(DOCKER_CONTAINER_NAME) bash
 
-build:
+$(BUILD_TARGET):
 	export USER="$$(id -un)" ; \
 	export UID="$$(id -u)" ; \
 	export GID="$$(id -g)" ; \
