@@ -15,6 +15,7 @@
 #                           (default: platform llama.cpp cache dir, or
 #                            $LLAMA_CACHE if set)
 #   -H, --hardlink          Create hardlinks instead of symlinks
+#   -S, --sudo              Use sudo to create links
 #   -f, --force             Overwrite existing symlinks
 #   -n, --dry-run           Print actions without making changes
 #   -v, --verbose           Show extra detail
@@ -85,6 +86,7 @@ default_llama_cache_dir() {
 OLLAMA_MODELS="${OLLAMA_MODELS:-${HOME}/.ollama/models}"
 DEST_DIR=""
 HARDLINK=0
+SUDO=""
 FORCE=0
 DRY_RUN=0
 VERBOSE=0
@@ -94,6 +96,7 @@ while [[ $# -gt 0 ]]; do
         -o|--ollama-dir)   OLLAMA_MODELS="$2";  shift 2 ;;
         -d|--dest-dir)     DEST_DIR="$2";    shift 2 ;;
         -H|--hardlink)     HARDLINK=1;       shift   ;;
+        -S|--sudo)         SUDO=sudo;        shift   ;;
         -f|--force)        FORCE=1;          shift   ;;
         -n|--dry-run)      DRY_RUN=1;        shift   ;;
         -v|--verbose)      VERBOSE=1;        shift   ;;
@@ -224,7 +227,7 @@ EOF
             info "Replacing existing symlink: $link_name"
             if [[ "$DRY_RUN" -eq 0 ]]; then
                 # Leave existing symlinks as symlinks
-                ln -sf "$abs_blob" "$link_path"
+                $SUDO ln -sf "$abs_blob" "$link_path"
             fi
             (( created++ )) || true
         else
@@ -239,9 +242,9 @@ EOF
             info "Replacing existing file: $link_name"
             if [[ "$DRY_RUN" -eq 0 ]]; then
                 if [[ "$HARDLINK" -eq 1 ]]; then
-                    ln -f "$abs_blob" "$link_path"
+                    $SUDO ln -f "$abs_blob" "$link_path"
                 else
-                    ln -sf "$abs_blob" "$link_path"
+                    $SUDO ln -sf "$abs_blob" "$link_path"
                 fi
             fi
             (( created++ )) || true
@@ -254,13 +257,13 @@ EOF
             info "Creating hardlink: $link_name"
             dbg "  -> $abs_blob"
             if [[ "$DRY_RUN" -eq 0 ]]; then
-                ln "$abs_blob" "$link_path"
+                $SUDO ln "$abs_blob" "$link_path"
             fi
         else
             info "Creating symlink: $link_name"
             dbg "  -> $abs_blob"
             if [[ "$DRY_RUN" -eq 0 ]]; then
-                ln -s "$abs_blob" "$link_path"
+                $SUDO ln -s "$abs_blob" "$link_path"
             fi
         fi
         (( created++ )) || true
