@@ -8,8 +8,8 @@ all:
 	@echo "Targets:"
 	@echo "    network				Makes network $(DOCKER_NETWORK_NAME)"
 	@echo "    up					Runs 'docker compose up'"
-	@echo "    build-devbox			Runs 'docker build -f Dockerfile.devbox'"
-	@echo "    shell				Runs 'docker exec -it devbox bash'"
+	@echo "    build				Runs 'docker build -f $(DOCKERFILE)'"
+	@echo "    shell				Runs 'docker exec -it $(DOCKER_CONTAINER_NAME) bash'"
 
 network:
 	if [ -n "$(DOCKER_NETWORK_NAME)" ] ; then \
@@ -20,9 +20,9 @@ network:
 	fi
 
 up: network
-	export DEVBOX_USER="$$(id -un)" ; \
-	export DEVBOX_UID="$$(id -u)" ; \
-	export DEVBOX_GID="$$(id -g)" ; \
+	export USER="$$(id -un)" ; \
+	export UID="$$(id -u)" ; \
+	export GID="$$(id -g)" ; \
 	docker compose up -d --remove-orphans --build
 
 down:
@@ -31,16 +31,16 @@ down:
 shell: up
 	docker run --rm -it $(DOCKER_CONTAINER_NAME) bash
 
-build-devbox:
-	export DEVBOX_USER="$$(id -un)" ; \
-	export DEVBOX_UID="$$(id -u)" ; \
-	export DEVBOX_GID="$$(id -g)" ; \
+build:
+	export USER="$$(id -un)" ; \
+	export UID="$$(id -u)" ; \
+	export GID="$$(id -g)" ; \
 	docker build \
 		--progress=plain \
-		-f Dockerfile.devbox \
-		--build-arg DEVBOX_USER="$$DEVBOX_USER" \
-		--build-arg DEVBOX_UID="$$DEVBOX_UID" \
-		--build-arg DEVBOX_GID="$$DEVBOX_GID" \
-		-t devbox:latest \
+		-f $(DOCKERFILE) \
+		--build-arg USER="$$USER" \
+		--build-arg UID="$$UID" \
+		--build-arg GID="$$GID" \
+		-t $(DOCKER_CONTAINER_NAME):$(DOCKER_CONTAINER_TAG) \
 		$${DOCKER_BUILD_CONTEXT:-.}
 
