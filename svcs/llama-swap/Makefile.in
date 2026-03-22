@@ -1,1 +1,3 @@
+DOCKER_CONTEXT := default
+
 DOCKER_COMPOSE_FILE := compose.linux-vulkan.yml

@@ -1,4 +1,5 @@
 
+include Makefile.in
 include ../../make/docker-compose.Makefile
 
 ifeq ($(TARGETOS),macos)

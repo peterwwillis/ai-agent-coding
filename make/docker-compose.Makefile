@@ -1,4 +1,6 @@
 
+.PHONY: up down build shell
+
 ifeq ($(OS),Windows_NT)
 	TARGETOS := windows
 else ifeq ($(shell uname -s),Linux)
@@ -20,7 +22,9 @@ BUILD_TARGET := build
 
 export DOCKER_NETWORK_NAME DOCKER_CONTAINER_NAME DOCKER_BUILD_CONTEXT DOCKER_COMPOSE_FILE
 
-
+ifneq ($(DOCKER_CONTEXT),)
+	DOCKER_ARGS := -c $(DOCKER_CONTEXT)
+endif
 ifneq ($(DOCKER_COMPOSE_FILE),)
 	DOCKER_COMPOSE_ARGS := -f $(DOCKER_COMPOSE_FILE)
 endif
@@ -45,19 +49,19 @@ $(UP_TARGET): network
 	export USER="$$(id -un)" ; \
 	export UID="$$(id -u)" ; \
 	export GID="$$(id -g)" ; \
-	docker compose up -d --remove-orphans --build $(DOCKER_COMPOSE_ARGS)
+	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) up -d --remove-orphans --build $(DOCKER_COMPOSE_UP_ARGS)
 
 $(DOWN_TARGET):
-	docker compose down $(DOCKER_COMPOSE_ARGS)
+	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) down $(DOCKER_COMPOSE_ARGS)
 
 $(SHELL_TARGET): up
-	docker run --rm -it $(DOCKER_CONTAINER_NAME) bash
+	docker $(DOCKER_ARGS) run --rm -it $(DOCKER_CONTAINER_NAME) bash
 
 $(BUILD_TARGET):
 	export USER="$$(id -un)" ; \
 	export UID="$$(id -u)" ; \
 	export GID="$$(id -g)" ; \
-	docker build \
+	docker $(DOCKER_ARGS) build \
 		--progress=plain \
 		-f $(DOCKERFILE) \
 		--build-arg USER="$$USER" \
