@@ -37,8 +37,8 @@ services:
       # Disable automatic HTTPS – we supply our own cert
       - CADDY_AUTO_TLS=off
     # Linux: uncomment to make host services reachable as host.docker.internal
-    # extra_hosts:
-    #   - "host.docker.internal:host-gateway"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   caddy_data:
