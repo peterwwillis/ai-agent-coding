@@ -12,7 +12,9 @@ services:
       - PASSWORD=password
       - DEFAULT_WORKSPACE=/config/workspace
     volumes:
-      - ./config:/config
+      - ~/aia1/svcs/vscode:/config
+      - ~/git:/config/workspace/git:ro
+      - ~/aia1:/config/workspace/aia1
     networks:
       - ai-agent-lab
 
