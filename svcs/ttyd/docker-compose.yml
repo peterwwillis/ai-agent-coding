@@ -1,0 +1,17 @@
+services:
+  ttyd:
+    image: tsl0922/ttyd
+    container_name: ttyd
+    restart: unless-stopped
+    ports:
+      - "17681:7681"
+    volumes:
+      - ~/git:/mnt/git:ro
+      - ~/aia1:/mnt/aia1
+    command: bash
+    networks:
+      - ai-agent-lab
+
+networks:
+  ai-agent-lab:
+    external: true

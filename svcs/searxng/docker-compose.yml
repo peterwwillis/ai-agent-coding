@@ -1,0 +1,17 @@
+services:
+  searxng:
+    image: searxng/searxng
+    container_name: searxng
+    restart: unless-stopped
+    ports:
+      - "18888:8080"
+    volumes:
+      - ~/aia1/svcs/searxng:/etc/searxng:ro
+    environment:
+      - SEARXNG_SECRET=changeme
+    networks:
+      - ai-agent-lab
+
+networks:
+  ai-agent-lab:
+    external: true

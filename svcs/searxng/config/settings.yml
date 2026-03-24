@@ -1,0 +1,31 @@
+# SearXNG settings
+
+search:
+  safe_search: 0
+  autocomplete: ""
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "changeme"  # Should be changed for production
+  base_url: false
+
+ui:
+  static_path: ""
+  templates_path: ""
+  theme: simple
+  center_alignment: false
+  default_locale: ""
+  query_in_title: false
+  infinite_scroll: false
+
+engines:
+  - name: google
+    engine: google
+    shortcut: g
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: w
