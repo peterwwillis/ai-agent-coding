@@ -16,17 +16,6 @@
 #            extra_hosts:
 #              - "host.docker.internal:host-gateway"
 #
-# Service port defaults (adjust to match your local setup):
-#   Ollama           11434
-#   llama-swap        8080
-#   Open WebUI        3000
-#   n8n               5678
-#   ttyd (terminal)   7681
-#   code-server       8443
-#   SearXNG           8888
-#   llama.cpp RPC     8081
-#   noVNC (VNC)       6080
-#
 # Basic-auth credentials:
 #   Set PROXY_AUTH_USER and PROXY_AUTH_HASH in .env (see .env.example).
 #   Caddy substitutes {env.VAR} placeholders at startup – no secrets in this file.
@@ -58,8 +47,8 @@
     # --------------------------------------------------------------------------
     # /ollama – local Ollama inference server
     # --------------------------------------------------------------------------
-    handle_path /ollama/* {
-        reverse_proxy host.docker.internal:11434 {
+    handle_path ${OLLAMA_URL} {
+        reverse_proxy ${OLLAMA_HOST}:${OLLAMA_PORT} {
             header_up Host {upstream_hostport}
         }
     }
@@ -67,8 +56,8 @@
     # --------------------------------------------------------------------------
     # /llama-swap – llama.cpp model-swap proxy
     # --------------------------------------------------------------------------
-    handle_path /llama-swap/* {
-        reverse_proxy host.docker.internal:8080 {
+    handle_path ${LLAMASWAP_URL} {
+        reverse_proxy ${LLAMASWAP_HOST}:${LLAMASWAP_PORT} {
             header_up Host {upstream_hostport}
         }
     }
@@ -76,21 +65,8 @@
     # --------------------------------------------------------------------------
     # /openwebui – Open WebUI chat front-end
     # --------------------------------------------------------------------------
-    handle_path /openwebui/* {
-        reverse_proxy host.docker.internal:3000 {
-            header_up Host {upstream_hostport}
-        }
-    }
-
-    # --------------------------------------------------------------------------
-    # /n8n – workflow automation (PROTECTED)
-    # Credentials loaded from PROXY_AUTH_USER / PROXY_AUTH_HASH env vars.
-    # --------------------------------------------------------------------------
-    handle_path /n8n/* {
-        basicauth * {
-            {$PROXY_AUTH_USER:admin} {$PROXY_AUTH_HASH}
-        }
-        reverse_proxy host.docker.internal:5678 {
+    handle_path ${OPENWEBUI_URL} {
+        reverse_proxy ${OPENWEBUI_HOST}:${OPENWEBUI_PORT} {
             header_up Host {upstream_hostport}
         }
     }
@@ -98,11 +74,11 @@
     # --------------------------------------------------------------------------
     # /terminal – ttyd web terminal (PROTECTED, WebSocket-capable)
     # --------------------------------------------------------------------------
-    handle_path /terminal/* {
+    handle_path ${TTYD_URL} {
         basicauth * {
             {$PROXY_AUTH_USER:admin} {$PROXY_AUTH_HASH}
         }
-        reverse_proxy host.docker.internal:7681 {
+        reverse_proxy ${TTYD_HOST}:${TTYD_PORT} {
             header_up Host {upstream_hostport}
             # Enable WebSocket proxying
             header_up Connection {http.request.header.Connection}
@@ -113,11 +89,11 @@
     # --------------------------------------------------------------------------
     # /code – code-server (browser VS Code) (PROTECTED, WebSocket-capable)
     # --------------------------------------------------------------------------
-    handle_path /code/* {
+    handle_path ${VSCODE_URL} {
         basicauth * {
             {$PROXY_AUTH_USER:admin} {$PROXY_AUTH_HASH}
         }
-        reverse_proxy host.docker.internal:8443 {
+        reverse_proxy ${VSCODE_HOST}:${VSCODE_PORT} {
             header_up Host {upstream_hostport}
             header_up Connection {http.request.header.Connection}
             header_up Upgrade   {http.request.header.Upgrade}
@@ -127,8 +103,8 @@
     # --------------------------------------------------------------------------
     # /searxng – SearXNG local meta-search engine
     # --------------------------------------------------------------------------
-    handle_path /searxng/* {
-        reverse_proxy host.docker.internal:8888 {
+    handle_path ${SEARXNG_URL} {
+        reverse_proxy ${SEARXNG_HOST}:${SEARXNG_PORT} {
             header_up Host {upstream_hostport}
         }
     }
@@ -136,8 +112,8 @@
     # --------------------------------------------------------------------------
     # /llamacpp-rpc – llama.cpp RPC frontend/aggregator
     # --------------------------------------------------------------------------
-    handle_path /llamacpp-rpc/* {
-        reverse_proxy host.docker.internal:8081 {
+    handle_path ${LLAMACPP_RPC_URL} {
+        reverse_proxy ${LLAMACPP_RPC_HOST}:${LLAMACPP_RPC_PORT} {
             header_up Host {upstream_hostport}
         }
     }
@@ -145,11 +121,11 @@
     # --------------------------------------------------------------------------
     # /vnc – noVNC web VNC client (PROTECTED, WebSocket-capable)
     # --------------------------------------------------------------------------
-    handle_path /vnc/* {
+    handle_path ${VNC_URL} {
         basicauth * {
             {$PROXY_AUTH_USER:admin} {$PROXY_AUTH_HASH}
         }
-        reverse_proxy host.docker.internal:6080 {
+        reverse_proxy ${VNC_HOST}:${VNC_PORT} {
             header_up Host {upstream_hostport}
             header_up Connection {http.request.header.Connection}
             header_up Upgrade   {http.request.header.Upgrade}
