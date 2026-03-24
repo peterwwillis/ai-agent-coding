@@ -19,11 +19,9 @@ BUILD_TARGET := build
 NETWORK_TARGET := network
 
 
-# Add a DOCKER_NETWORK_NAME= to Makefile.inc to create a docker network
 -include Makefile.inc
-
-
 export DOCKER_NETWORK_NAME DOCKER_CONTAINER_NAME DOCKER_BUILD_CONTEXT DOCKER_COMPOSE_FILE
+
 
 ifneq ($(DOCKER_CONTEXT),)
 	DOCKER_ARGS := -c $(DOCKER_CONTEXT)
@@ -52,12 +50,11 @@ network:
 	fi
 
 up: $(NETWORK_TARGET)
-	export USER="$$(id -un)" ; \
-	export UID="$$(id -u)" ; \
-	export GID="$$(id -g)" ; \
+	export USER="$$(id -un)" UID="$$(id -u)" GID="$$(id -g)" ; \
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) up -d --remove-orphans $(DOCKER_COMPOSE_UP_ARGS)
 
 down:
+	export USER="$$(id -un)" UID="$$(id -u)" GID="$$(id -g)" ; \
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) down $(DOCKER_COMPOSE_DOWN_ARGS)
 
 run: up
@@ -84,4 +81,3 @@ docker-build:
 		--build-arg GID="$$GID" \
 		-t $(DOCKER_CONTAINER_NAME):$(DOCKER_CONTAINER_TAG) \
 		$${DOCKER_BUILD_CONTEXT:-.}
-
