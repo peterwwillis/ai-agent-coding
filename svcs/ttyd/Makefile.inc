@@ -1,4 +1,5 @@
-DOCKER_CONTEXT := default
-DOCKER_CONTAINER_NAME := ttyd
-DOCKER_COMPOSE_FILE := docker-compose.yml
+# Runs in the Colima VM
+DOCKER_CONTEXT := colima-ai-agent-1
 DOCKER_NETWORK_NAME := ai-agent-lab
+
+DOCKER_CONTAINER_NAME := ttyd

@@ -1,8 +1,8 @@
 services:
   ttyd:
     image: tsl0922/ttyd
-    container_name: ttyd
-    restart: unless-stopped
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
     ports:
       - "17681:7681"
     volumes:
@@ -15,3 +15,4 @@ services:
 networks:
   ai-agent-lab:
     external: true
+    name: ai-agent-lab

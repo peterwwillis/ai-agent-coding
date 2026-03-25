@@ -1,8 +1,8 @@
 services:
   vscode:
     image: linuxserver/code-server
-    container_name: vscode
-    restart: unless-stopped
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
     ports:
       - "11843:8443"
     environment:
@@ -21,3 +21,4 @@ services:
 networks:
   ai-agent-lab:
     external: true
+    name: ai-agent-lab

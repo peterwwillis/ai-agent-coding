@@ -1,5 +1,5 @@
-DOCKER_CONTEXT := default
-DOCKER_CONTAINER_NAME := vscode
+# Runs in the Colima VM
+DOCKER_CONTEXT := colima-ai-agent-1
 DOCKER_NETWORK_NAME := ai-agent-lab
 
-#export DOCKER_NETWORK_NAME
+DOCKER_CONTAINER_NAME := vscode
