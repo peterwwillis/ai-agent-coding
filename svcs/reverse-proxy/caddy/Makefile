@@ -1,4 +1,3 @@
-CADDY_CONFIG_DIR ?= ~/aia1/svc/reverse-proxy/caddy
 
 # Relative path to the shared scripts directory
 SCRIPTS := ../scripts
@@ -50,9 +49,10 @@ caddy-setup: ## First-time setup: copy .env.example and generate TLS certs
 	@echo "PROXY_AUTH_HASH=..., then run 'make up'."
 
 caddy-clean: ## Remove generated certs and .env (DESTRUCTIVE)
-	@echo "This will delete $(CADDY_CONFIG_DIR)/certs/ and $(CADDY_CONFIG_DIR)/.env . Press Ctrl-C to cancel..."
+	@echo "This will delete $(CADDY_CONFIG_DIR)/certs/ and $(CADDY_CONFIG_DIR)/.env"
+	@echo "Press Ctrl-C to cancel, or Enter to continue ..."
 	@read -r INPUT
-	rm -rf $(CADDY_CONFIG_DIR)/certs/ .env
+	rm -rf $(CADDY_CONFIG_DIR)/certs/ $(CADDY_CONFIG_DIR)/.env
 
 check-install:
 	@[ -f $(CADDY_CONFIG_DIR)/.env ] || { echo "ERROR: .env not found. Run 'make install' first." >&2; exit 1; }
@@ -97,4 +97,9 @@ trust-ca: ## Add the local CA certificate to the OS trust store.
 	fi
 
 
+# Load main docker-compose Makefile to override
 include ../../../make/docker-compose.Makefile
+
+ifndef CADDY_CONFIG_DIR
+$(error Please define CADDY_CONFIG_DIR in Makefile.inc)
+endif
