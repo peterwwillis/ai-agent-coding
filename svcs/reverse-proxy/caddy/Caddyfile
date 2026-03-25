@@ -2,7 +2,6 @@
 # =============================================================================
 # Hostname: adapt the site address below to match your machine's LAN hostname
 # or IP.  Examples:
-#   mac.local          – mDNS name on macOS (default shown here)
 #   myhost.local       – custom mDNS / Avahi hostname on Linux
 #   192.168.1.50       – static LAN IP (no hostname resolution needed)
 #
@@ -27,9 +26,9 @@
 #     make up
 # =============================================================================
 
-# Change mac.local to your machine's hostname or IP.
+# Change localhost to your machine's hostname or IP.
 # You can also use {env.PROXY_DOMAIN} here if set in .env.
-{$PROXY_DOMAIN:mac.local} {
+{$PROXY_DOMAIN:localhost} {
 
     # --------------------------------------------------------------------------
     # Local TLS – serve the self-signed / CA-signed certificate
