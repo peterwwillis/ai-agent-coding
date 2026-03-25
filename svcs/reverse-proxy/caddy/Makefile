@@ -32,6 +32,9 @@ caddy-health: ## Run health check against the proxy routes
 	$(SCRIPTS)/health-check.sh --skip-tls-verify --host "$(PROXY_DOMAIN)"
 
 caddy-setup: ## First-time setup: copy .env.example and generate TLS certs
+	@if [ ! -f $(CADDY_CONFIG_DIR)/Caddyfile ] ; then \
+		cp Caddyfile $(CADDY_CONFIG_DIR)/Caddyfile ; \
+	fi
 	@if [ ! -f $(CADDY_CONFIG_DIR)/.env ]; then \
 		cp .env.example $(CADDY_CONFIG_DIR)/.env; \
 		echo "Created $(CADDY_CONFIG_DIR)/.env from .env.example" ; \

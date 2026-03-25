@@ -3,7 +3,7 @@ CADDY_CONFIG_DIR := ~/aia1/svcs/reverse-proxy/caddy
 
 # Runs in the Colima VM
 DOCKER_CONTEXT := colima-ai-agent-1
-DOCKER_NETWORK := ai-agent-lab
+DOCKER_NETWORK_NAME := ai-agent-lab
 
 DOCKER_CONTAINER_NAME := caddy
 
