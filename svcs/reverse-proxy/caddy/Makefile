@@ -2,11 +2,6 @@
 # Relative path to the shared scripts directory
 SCRIPTS := ../scripts
 
-# Read PROXY_DOMAIN from .env without shell-sourcing (avoids $ expansion in hashes).
-_D := $(shell grep -sE '^PROXY_DOMAIN=' $(CADDY_CONFIG_DIR)/.env 2>/dev/null | cut -d= -f2-)
-# Defaults to 'localhost'
-PROXY_DOMAIN := $(if $(_D),$(_D),localhost)
-
 .PHONY: caddy-help caddy-setup caddy-up caddy-reload caddy-health caddy-clean check-install gen-certs gen-hash trust-ca
 
 HELP_TARGET = caddy-help
@@ -39,14 +34,12 @@ caddy-health: ## Run health check against the proxy routes
 caddy-setup: ## First-time setup: copy .env.example and generate TLS certs
 	@if [ ! -f $(CADDY_CONFIG_DIR)/.env ]; then \
 		cp .env.example $(CADDY_CONFIG_DIR)/.env; \
-		echo "Created $(CADDY_CONFIG_DIR)/.env from .env.example – edit it to set your credentials."; \
+		echo "Created $(CADDY_CONFIG_DIR)/.env from .env.example" ; \
 	else \
-		echo ".env already exists, skipping copy."; \
-	fi
-	$(MAKE) gen-certs
-	@echo ""
-	@echo "Next: run 'make gen-hash' to get a bcrypt hash, paste it into .env as"
-	@echo "PROXY_AUTH_HASH=..., then run 'make up'."
+		echo ".env already exists as '$(CADDY_CONFIG_DIR)/.env', skipping copy."; \
+	fi ; \
+	echo "Configure it with your PROXY_DOMAIN entry." ; \
+	echo "Then run 'make gen-certs'."
 
 caddy-clean: ## Remove generated certs and .env (DESTRUCTIVE)
 	@echo "This will delete $(CADDY_CONFIG_DIR)/certs/ and $(CADDY_CONFIG_DIR)/.env"
@@ -68,6 +61,9 @@ check-install:
 gen-certs: ## Generate a CA-signed TLS certificate (uses PROXY_DOMAIN from .env)
 	@mkdir -p $(CADDY_CONFIG_DIR)/certs
 	$(SCRIPTS)/gen-certs.sh --ca --domain "$(PROXY_DOMAIN)" --out $(CADDY_CONFIG_DIR)/certs/
+	@echo ""
+	@echo "Next: run 'make gen-hash' to get a bcrypt hash, paste it into .env as"
+	@echo "PROXY_AUTH_HASH=..., then run 'make up'."
 
 gen-hash: ## Interactively generate a bcrypt password hash
 	@$(SCRIPTS)/gen-bcrypt.sh
@@ -97,8 +93,17 @@ trust-ca: ## Add the local CA certificate to the OS trust store.
 	fi
 
 
-# Load main docker-compose Makefile to override
+### Load main docker-compose Makefile to override
 include ../../../make/docker-compose.Makefile
+
+### Must load the rest after docker-compose.Makefile, as it loads
+### the Makefile.inc variables
+
+# Read PROXY_DOMAIN from .env without shell-sourcing (avoids $ expansion in hashes).
+_D := $(shell grep -sE '^PROXY_DOMAIN=' $(CADDY_CONFIG_DIR)/.env 2>/dev/null | cut -d= -f2-)
+# Defaults to 'localhost'
+PROXY_DOMAIN := $(if $(_D),$(_D),localhost)
+
 
 ifndef CADDY_CONFIG_DIR
 $(error Please define CADDY_CONFIG_DIR in Makefile.inc)

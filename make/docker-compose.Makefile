@@ -31,7 +31,12 @@ endif
 
 # Add docker compose file arg if specified
 ifneq ($(DOCKER_COMPOSE_FILE),)
-	DOCKER_COMPOSE_ARGS := -f $(DOCKER_COMPOSE_FILE)
+	DOCKER_COMPOSE_ARGS += -f $(DOCKER_COMPOSE_FILE)
+endif
+
+# Add docker compose --env-file
+ifneq ($(DOCKER_COMPOSE_ENV_FILE),)
+	DOCKER_COMPOSE_ARGS += --env-file $(DOCKER_COMPOSE_ENV_FILE)
 endif
 
 all: $(HELP_TARGET)

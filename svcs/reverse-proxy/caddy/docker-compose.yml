@@ -18,6 +18,7 @@ services:
     ports:
       # HTTPS entrypoint
       - "443:443"
+
     volumes:
       # Caddyfile configuration
       - ~/aia1/svcs/reverse-proxy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -27,16 +28,19 @@ services:
       - caddy_data:/data
       # Caddy config directory
       - caddy_config:/config
-    networks:
-      - proxy
+
     # Credentials and domain are loaded from .env (never hard-coded here).
     # PROXY_AUTH_USER, PROXY_AUTH_HASH, and PROXY_DOMAIN are substituted by
     # Caddy at startup via {$VAR} placeholders in the Caddyfile.
     env_file:
       - ~/aia1/svcs/reverse-proxy/caddy/.env
+
     environment:
       # Disable automatic HTTPS – we supply our own cert
       - CADDY_AUTO_TLS=off
+
+    networks:
+      - ai-agent-lab
     # Linux: uncomment to make host services reachable as host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -46,5 +50,6 @@ volumes:
   caddy_config:
 
 networks:
-  proxy:
-    driver: bridge
+  ai-agent-lab:
+    external: true
+    name: ai-agent-lab
