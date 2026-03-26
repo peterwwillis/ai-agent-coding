@@ -12,12 +12,12 @@
 
 services:
   caddy:
-    image: caddy:2.9-alpine
+    image: caddy:2.11.2-alpine
     container_name: ${DOCKER_CONTAINER_NAME}
     restart: always
     ports:
       # HTTPS entrypoint
-      - "443:443"
+      - "1443:443"
 
     volumes:
       # Caddyfile configuration
