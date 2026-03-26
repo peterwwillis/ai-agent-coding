@@ -5,10 +5,10 @@ services:
     restart: always
     #ports:
     #  - "17681:7681"
-    volumes:
-      - ~/git:/mnt/git:ro
-      - ~/aia1:/mnt/aia1
-    command: bash
+    #volumes:
+    #  - ~/git:/mnt/git:ro
+    #  - ~/aia1:/mnt/aia1
+    #command: bash
     networks:
       - ai-agent-lab
 
