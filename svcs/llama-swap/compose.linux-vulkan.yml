@@ -4,8 +4,8 @@ services:
     image: ghcr.io/mostlygeek/llama-swap:vulkan
     container_name: ${DOCKER_CONTAINER_NAME}
     restart: always
-    ports:
-      - "11400:8080"
+    #ports:
+    #  - "11400:8080"
     volumes:
       - "~/.cache/llama.cpp:/models"
       - "~/.cache/llama.cpp:${HOME}/.cache/llama.cpp"

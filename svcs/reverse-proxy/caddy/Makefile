@@ -31,17 +31,22 @@ caddy-reload: ## Reload Caddy configuration without downtime
 caddy-health: ## Run health check against the proxy routes
 	$(SCRIPTS)/health-check.sh --skip-tls-verify --host "$(PROXY_DOMAIN)"
 
-caddy-setup: ## First-time setup: copy .env.example and generate TLS certs
+caddy-install:
 	@if [ ! -f $(CADDY_CONFIG_DIR)/Caddyfile ] ; then \
 		cp Caddyfile $(CADDY_CONFIG_DIR)/Caddyfile ; \
+		echo "Copied Caddyfile to '$(CADDY_CONFIG_DIR)/Caddyfile'" ; \
+	else \
+		echo "Caddyfile already exists as '$(CADDY_CONFIG_DIR)/Caddyfile', skipping copy" ; \
 	fi
 	@if [ ! -f $(CADDY_CONFIG_DIR)/.env ]; then \
 		cp .env.example $(CADDY_CONFIG_DIR)/.env; \
-		echo "Created $(CADDY_CONFIG_DIR)/.env from .env.example" ; \
+		echo "Copied .env.example to '$(CADDY_CONFIG_DIR)/.env'" ; \
 	else \
 		echo ".env already exists as '$(CADDY_CONFIG_DIR)/.env', skipping copy."; \
 	fi ; \
-	echo "Configure it with your PROXY_DOMAIN entry." ; \
+
+caddy-setup: caddy-install ## First-time setup: copy .env.example and generate TLS certs
+	echo "Configure $(CADDY_CONFIG_DIR)/.env with your PROXY_DOMAIN entry." ; \
 	echo "Then run 'make gen-certs'."
 
 caddy-clean: ## Remove generated certs and .env (DESTRUCTIVE)

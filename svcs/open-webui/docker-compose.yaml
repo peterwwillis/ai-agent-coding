@@ -1,14 +1,21 @@
 services:
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
+    container_name: ${DOCKER_CONTAINER_NAME}
     restart: always
-    ports:
-      - "3000:8080"
+    #ports:
+    #  - "3000:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - open-webui:/app/backend/data
+    networks:
+      - ai-agent-lab
 
 volumes:
   open-webui:
+
+networks:
+  ai-agent-lab:
+    external: true
+    name: ai-agent-lab

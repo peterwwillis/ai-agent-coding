@@ -3,8 +3,8 @@ services:
     image: linuxserver/code-server
     container_name: ${DOCKER_CONTAINER_NAME}
     restart: always
-    ports:
-      - "11843:8443"
+    #ports:
+    #  - "11843:8443"
     environment:
       - PUID=${UID}
       - PGID=${GID}

@@ -3,8 +3,8 @@ services:
     image: tsl0922/ttyd
     container_name: ${DOCKER_CONTAINER_NAME}
     restart: always
-    ports:
-      - "17681:7681"
+    #ports:
+    #  - "17681:7681"
     volumes:
       - ~/git:/mnt/git:ro
       - ~/aia1:/mnt/aia1

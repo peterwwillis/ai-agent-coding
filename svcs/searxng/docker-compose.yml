@@ -3,8 +3,8 @@ services:
     image: searxng/searxng
     container_name: ${DOCKER_CONTAINER_NAME}
     restart: always
-    ports:
-      - "18888:8080"
+    #ports:
+    #  - "18888:8080"
     volumes:
       - ~/aia1/svcs/searxng:/etc/searxng:ro
     environment:
