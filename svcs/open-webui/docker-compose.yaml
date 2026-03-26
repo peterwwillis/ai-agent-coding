@@ -10,8 +10,10 @@ services:
     volumes:
       - open-webui:/app/backend/data
     environment:
+      - OPEN_WEBUI_BASE_URL=/openwebui/
       #- WEBUI_URL=/openwebui/
       - WEBUI_URL=https://thinkpaddy.local/openwebui/
+      - WEBUI_BASE_URL=https://thinkpaddy.local/openwebui/
       - "CORS_ALLOW_ORIGIN=https://thinkpaddy.local;https://open-webui:8080;http://open-webui:8080"
       - ENABLE_SIGNUP=true
       - ENABLE_LOGIN_FORM=true
