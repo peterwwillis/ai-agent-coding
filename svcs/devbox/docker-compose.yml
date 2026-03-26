@@ -16,11 +16,11 @@ services:
     working_dir: /workspace
     tty: true
     stdin_open: true
-    networks:
-      - ai-agent-lab
     environment:
       # Playwright Test will connect to the remote browser server
       - PW_TEST_CONNECT_WS_ENDPOINT=ws://playwright:3000/
+    networks:
+      - ai-agent-lab
 
 networks:
   ai-agent-lab:

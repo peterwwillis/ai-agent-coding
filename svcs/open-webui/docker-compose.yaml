@@ -9,6 +9,12 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - open-webui:/app/backend/data
+    environment:
+      #- WEBUI_URL=/openwebui/
+      - WEBUI_URL=https://thinkpaddy.local/openwebui/
+      - "CORS_ALLOW_ORIGIN=https://thinkpaddy.local;https://open-webui:8080;http://open-webui:8080"
+      - ENABLE_SIGNUP=true
+      - ENABLE_LOGIN_FORM=true
     networks:
       - ai-agent-lab
 
