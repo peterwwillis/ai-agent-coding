@@ -9,6 +9,7 @@ services:
     volumes:
       - "~/.cache/llama.cpp:/models"
       - "~/aia1/svcs/localai:/configuration"
+      #- 
     
     # Pass your AMD GPU into the container
     devices:

@@ -39,6 +39,8 @@ ifneq ($(DOCKER_COMPOSE_ENV_FILE),)
 	DOCKER_COMPOSE_ARGS += --env-file $(DOCKER_COMPOSE_ENV_FILE)
 endif
 
+DOCKER_COMPOSE_SHELL_BIN ?= bash -l
+
 all: $(HELP_TARGET)
 
 help:
@@ -70,23 +72,23 @@ down:
 	export USER="$$(id -un)" UID="$$(id -u)" GID="$$(id -g)" ; \
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) down $(DOCKER_COMPOSE_DOWN_ARGS)
 
-restart:
+restart: $(NETWORK_TARGET)
 	export USER="$$(id -un)" UID="$$(id -u)" GID="$$(id -g)" ; \
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) restart $(DOCKER_COMPOSE_RESTART_ARGS)
 
-run: up
+run: $(UP_TARGET)
 	docker $(DOCKER_ARGS) run --rm -it $(DOCKER_CONTAINER_NAME) $(DOCKER_COMPOSE_RUN_ARGS)
 
-shell: up
-	docker $(DOCKER_ARGS) exec -it $(DOCKER_CONTAINER_NAME) sh
+shell: $(UP_TARGET)
+	docker $(DOCKER_ARGS) exec -it $(DOCKER_CONTAINER_NAME) $(DOCKER_COMPOSE_SHELL_BIN)
 
-exec: up
+exec: $(UP_TARGET)
 	docker $(DOCKER_ARGS) exec $(DOCKER_CONTAINER_NAME) $(DOCKER_COMPOSE_EXEC_ARGS)
 
-ps:
+ps: $(UP_TARGET)
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) ps
 
-logs:
+logs: $(UP_TARGET)
 	docker $(DOCKER_ARGS) compose $(DOCKER_COMPOSE_ARGS) logs -f $(DOCKER_COMPOSE_LOGS_ARGS)
 
 
