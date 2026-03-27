@@ -1,3 +1,7 @@
+{
+    auto_https off
+}
+
 # Caddyfile – local reverse-proxy for AI services (SUBDOMAIN VERSION)
 # =============================================================================
 # Hostname: adapt PROXY_DOMAIN to match your base local domain (e.g. localhost,
