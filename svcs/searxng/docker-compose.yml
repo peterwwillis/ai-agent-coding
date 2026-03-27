@@ -9,6 +9,7 @@ services:
       - ~/aia1/svcs/searxng:/etc/searxng:ro
     environment:
       - SEARXNG_SECRET=password
+      - SEARXNG_BASE_URL=https://thinkpaddy.local/searxng/
     networks:
       - ai-agent-lab
 
