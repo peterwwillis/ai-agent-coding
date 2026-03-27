@@ -1,0 +1,23 @@
+services:
+  localai:
+    # Use the Vulkan-optimized image
+    image: localai/localai:latest-gpu-vulkan
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
+    ports:
+      - "11480:8080"
+    volumes:
+      - "~/.cache/llama.cpp:/models"
+      - "~/aia1/svcs/localai:/configuration"
+    
+    # Pass your AMD GPU into the container
+    devices:
+      - /dev/dri:/dev/dri
+      # Optional: uncomment the line below if you also have ROCm drivers installed
+      - /dev/kfd:/dev/kfd
+
+# Runs on host network since container will not be running in VM
+#networks:
+#  ai-agent-lab:
+#    external: true
+#    name: ai-agent-lab

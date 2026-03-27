@@ -132,6 +132,16 @@
     }
 
     # --------------------------------------------------------------------------
+    # /localai – LocalAI inference server
+    # --------------------------------------------------------------------------
+    handle_path {$LOCALAI_URL} {
+        reverse_proxy {$LOCALAI_HOST}:{$LOCALAI_PORT} {
+            header_up Host {upstream_hostport}
+            header_up X-Forwarded-Prefix /localai
+        }
+    }
+
+    # --------------------------------------------------------------------------
     # Root: serve an HTML index with links to all services
     # --------------------------------------------------------------------------
     handle / {
@@ -160,6 +170,10 @@
         <li>
             <a href="/ollama/">Ollama</a>
             <div class="description">Local Ollama inference server</div>
+        </li>
+        <li>
+            <a href="/localai/">LocalAI</a>
+            <div class="description">LocalAI inference server</div>
         </li>
         <li>
             <a href="/llama-swap/">Llama-swap</a>
