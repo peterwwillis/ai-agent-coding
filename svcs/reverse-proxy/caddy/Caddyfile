@@ -107,6 +107,10 @@
             <a href="https://vnc.{$PROXY_DOMAIN}/">VNC<span class="protected">(Protected)</span></a>
             <div class="description">noVNC web client</div>
         </li>
+        <li>
+            <a href="https://memos.{$PROXY_DOMAIN}/">Memos<span class="protected">(Protected)</span></a>
+            <div class="description">Memo and note taking app</div>
+        </li>
     </ul>
 </body>
 </html>
@@ -202,3 +206,11 @@ localai.{$PROXY_DOMAIN} {
         header_up X-Forwarded-Prefix /
     }
 }
+
+memos.{$PROXY_DOMAIN} {
+    import common
+    reverse_proxy {$MEMOS_HOST}:{$MEMOS_PORT} {
+        header_up Host {upstream_hostport}
+    }
+}
+
