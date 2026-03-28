@@ -6,6 +6,9 @@ services:
       - "5230:5230"
     volumes:
       - ~/.config/memos:/var/opt/memos
+    environment:
+      - "MEMOS_UID=${UID}"
+      - "MEMOS_GID=${GID}"
     #networks:
     #  - ai-agent-lab
 
