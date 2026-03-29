@@ -9,7 +9,7 @@ services:
       - PUID=${UID}
       - PGID=${GID}
       - TZ=Etc/UTC
-      - PASSWORD=password
+      #- PASSWORD=password
       - DEFAULT_WORKSPACE=/config/workspace
     volumes:
       - ~/aia1/svcs/vscode:/config
