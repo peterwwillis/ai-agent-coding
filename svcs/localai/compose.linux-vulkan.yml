@@ -20,7 +20,7 @@ services:
       - "GID=${GID}"
       - "USER=${USER}"
       - "ADD_GROUPS=${ADD_GROUPS}"
-      - 'EXTERNAL_GRPC_BACKENDS="openai-proxy:127.0.0.1:50051"'
+      - 'EXTERNAL_GRPC_BACKENDS="openai-proxy:openai-proxy:50051"'
       #- 'LOCALAI_BACKEND_GALLERIES=[{"name":"my-gallery","url":"https://raw.githubusercontent.com/peterwwillis/localai-backend-openai/refs/heads/main/backend-gallery.yml"}]'
       #- 'LOCALAI_EXTERNAL_BACKENDS=openai-proxy'
     entrypoint: /entrypoint_new.sh
@@ -31,12 +31,19 @@ services:
       # Optional: uncomment the line below if you also have ROCm drivers installed
       - /dev/kfd:/dev/kfd
 
+    network_mode: bridge
+
 volumes:
   localai-backends:
   localai-data:
 
 # Runs on host network since container will not be running in VM
 #networks:
+#  bridge:
+#    driver: bridge
+#    name: bridge
+#    external: true
+
 #  ai-agent-lab:
 #    external: true
 #    name: ai-agent-lab
