@@ -1,0 +1,34 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
+    #ports:
+    #  - "3000:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - open-webui:/app/backend/data
+    environment:
+      # NOTE! It's VERY IMPORTANT TO GET CORS_ALLOW_ORIGIN RIGHT!
+      # If you do not, your requests to remote OpenAI API servers will be sent (and charged to you),
+      # but you will get a JSON error in response. Check the server logs when it starts up
+      # to make sure there are no CORS errors.
+      - "CORS_ALLOW_ORIGIN=https://openwebui.thinkpaddy.local;https://openwebui.thinkpaddy;https://thinkpaddy.local;https://thinkpaddy;https://open-webui:8080;http://open-webui:8080"
+      - ENABLE_SIGNUP=true
+      - ENABLE_LOGIN_FORM=true
+      - WEBUI_AUTH=True
+      #- GLOBAL_LOG_LEVEL=DEBUG
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - ENABLE_RAG_WEB_SEARCH=true
+      - RAG_WEB_SEARCH_ENGINE=searxng
+    networks:
+      - ai-agent-lab
+
+volumes:
+  open-webui:
+
+networks:
+  ai-agent-lab:
+    external: true
+    name: ai-agent-lab

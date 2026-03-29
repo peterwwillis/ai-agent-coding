@@ -18,7 +18,7 @@
 # =============================================================================
 set -euo pipefail
 
-HOST="mac.local"
+HOST="localhost"
 PORT="443"
 CURL_EXTRA=()
 AUTH_HEADER=()

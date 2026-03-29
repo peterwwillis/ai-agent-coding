@@ -12,38 +12,44 @@
 
 services:
   caddy:
-    image: caddy:2.9-alpine
-    restart: unless-stopped
+    image: caddy:2.11.2-alpine
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
     ports:
       # HTTPS entrypoint
-      - "443:443"
+      - "1443:443"
+
     volumes:
       # Caddyfile configuration
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ~/aia1/svcs/reverse-proxy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Local TLS certificates
-      - ./certs:/etc/caddy/certs:ro
+      - ~/aia1/svcs/reverse-proxy/caddy/certs:/etc/caddy/certs:ro
       # Caddy data directory (OCSP stapling cache, session tickets, etc.)
       - caddy_data:/data
       # Caddy config directory
       - caddy_config:/config
-    networks:
-      - proxy
+
     # Credentials and domain are loaded from .env (never hard-coded here).
     # PROXY_AUTH_USER, PROXY_AUTH_HASH, and PROXY_DOMAIN are substituted by
     # Caddy at startup via {$VAR} placeholders in the Caddyfile.
     env_file:
-      - .env
+      - ~/aia1/svcs/reverse-proxy/caddy/.env
+
     environment:
       # Disable automatic HTTPS – we supply our own cert
       - CADDY_AUTO_TLS=off
+
+    networks:
+      - ai-agent-lab
     # Linux: uncomment to make host services reachable as host.docker.internal
-    # extra_hosts:
-    #   - "host.docker.internal:host-gateway"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   caddy_data:
   caddy_config:
 
 networks:
-  proxy:
-    driver: bridge
+  ai-agent-lab:
+    external: true
+    name: ai-agent-lab

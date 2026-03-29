@@ -1,0 +1,19 @@
+services:
+  searxng:
+    image: searxng/searxng
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
+    #ports:
+    #  - "18888:8080"
+    volumes:
+      - ~/aia1/svcs/searxng:/etc/searxng:ro
+    environment:
+      - SEARXNG_SECRET=password
+      - SEARXNG_BASE_URL=https://thinkpaddy.local/searxng/
+    networks:
+      - ai-agent-lab
+
+networks:
+  ai-agent-lab:
+    external: true
+    name: ai-agent-lab

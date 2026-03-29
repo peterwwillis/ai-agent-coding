@@ -1,0 +1,49 @@
+services:
+  localai:
+    # Use the Vulkan-optimized image
+    image: localai/localai:latest-gpu-vulkan
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
+    ports:
+      - "11480:8080"
+    volumes:
+      - "~/.cache/llama.cpp:/models"
+      - "~/aia1/svcs/localai/config:/configuration"
+      - ./entrypoint_new.sh:/entrypoint_new.sh
+      - "~/git:/home/${USER}/git:ro"
+      - "~/aia1/svcs/localai/data:/home/${USER}/aia1/svcs/localai/data"
+      - localai-backends:/backends
+      - localai-data:/data
+    environment:
+      - "DEBUG=1"
+      - "UID=${UID}"
+      - "GID=${GID}"
+      - "USER=${USER}"
+      - "ADD_GROUPS=${ADD_GROUPS}"
+      - 'EXTERNAL_GRPC_BACKENDS="openai-proxy:openai-proxy:50051"'
+      #- 'LOCALAI_BACKEND_GALLERIES=[{"name":"my-gallery","url":"https://raw.githubusercontent.com/peterwwillis/localai-backend-openai/refs/heads/main/backend-gallery.yml"}]'
+      #- 'LOCALAI_EXTERNAL_BACKENDS=openai-proxy'
+    entrypoint: /entrypoint_new.sh
+    
+    # Pass your AMD GPU into the container
+    devices:
+      - /dev/dri:/dev/dri
+      # Optional: uncomment the line below if you also have ROCm drivers installed
+      - /dev/kfd:/dev/kfd
+
+    network_mode: bridge
+
+volumes:
+  localai-backends:
+  localai-data:
+
+# Runs on host network since container will not be running in VM
+#networks:
+#  bridge:
+#    driver: bridge
+#    name: bridge
+#    external: true
+
+#  ai-agent-lab:
+#    external: true
+#    name: ai-agent-lab

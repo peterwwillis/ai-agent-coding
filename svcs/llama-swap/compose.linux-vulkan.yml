@@ -2,17 +2,23 @@ services:
   llama-swap:
     # Use the Vulkan-optimized image
     image: ghcr.io/mostlygeek/llama-swap:vulkan
-    container_name: llama-swap
-    restart: unless-stopped
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
     ports:
       - "11400:8080"
     volumes:
-      - "${HOME}/.cache/llama.cpp:/models"
-      - "${HOME}/.cache/llama.cpp:${HOME}/.cache/llama.cpp"
-      - "${HOME}/.config/llama-swap/config.yaml:/app/config.yaml"
+      - "~/.cache/llama.cpp:/models"
+      - "~/.cache/llama.cpp:${HOME}/.cache/llama.cpp"
+      - "~/.config/llama-swap/config.yaml:/app/config.yaml"
     
     # Pass your AMD GPU into the container
     devices:
       - /dev/dri:/dev/dri
       # Optional: uncomment the line below if you also have ROCm drivers installed
       - /dev/kfd:/dev/kfd
+
+# Runs on host network since container will not be running in VM
+#networks:
+#  ai-agent-lab:
+#    external: true
+#    name: ai-agent-lab

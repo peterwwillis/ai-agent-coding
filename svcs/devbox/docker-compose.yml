@@ -11,17 +11,18 @@ services:
         - UID=${UID:-1001}
         - GID=${GID:-1001}
     volumes:
-      - ./:/workspace
+      - ~/git:/workspace/git:ro
+      - ~/aia1:/workspace/aia1
     working_dir: /workspace
     tty: true
     stdin_open: true
-    networks:
-      - dind-lab
     environment:
       # Playwright Test will connect to the remote browser server
-      - PW_TEST_CONNECT_WS_ENDPOINT=ws://pw:3000/
+      - PW_TEST_CONNECT_WS_ENDPOINT=ws://playwright:3000/
+    networks:
+      - ai-agent-lab
 
 networks:
-  dind-lab:
+  ai-agent-lab:
     external: true
-    name: dind-lab
+    name: ai-agent-lab

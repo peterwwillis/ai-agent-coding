@@ -1,0 +1,12 @@
+[Unit]
+Description=Simpleproxy TCP Forwarding (Host 443 to Colima 1443)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/simpleproxy -L 443 -R 127.0.0.1:1443
+Restart=on-failure
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target

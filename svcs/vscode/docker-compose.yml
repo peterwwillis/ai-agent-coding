@@ -1,0 +1,24 @@
+services:
+  vscode:
+    image: linuxserver/code-server
+    container_name: ${DOCKER_CONTAINER_NAME}
+    restart: always
+    #ports:
+    #  - "11843:8443"
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=Etc/UTC
+      #- PASSWORD=password
+      - DEFAULT_WORKSPACE=/config/workspace
+    volumes:
+      - ~/aia1/svcs/vscode:/config
+      - ~/git:/config/workspace/git:ro
+      - ~/aia1:/config/workspace/aia1
+    networks:
+      - ai-agent-lab
+
+networks:
+  ai-agent-lab:
+    external: true
+    name: ai-agent-lab

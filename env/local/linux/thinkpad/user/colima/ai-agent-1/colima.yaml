@@ -237,6 +237,11 @@ provision:
           mkswap /swapfile &&
           swapon -a
       fi
+      # enable zswap
+      echo 1 > /sys/module/zswap/parameters/enabled
+      echo 1 > /sys/module/zswap/parameters/shrinker_enabled
+      echo 20 > /sys/module/zswap/parameters/max_pool_percent
+      echo lz4 > /sys/module/zswap/parameters/compressor
       if [ ! -e /.firstboot ] ; then
           apt-get update &&
           apt-get upgrade -y &&

@@ -1,0 +1,18 @@
+services:
+  memos:
+    image: neosmemo/memos:stable
+    container_name: ${DOCKER_CONTAINER_NAME}
+    ports:
+      - "5230:5230"
+    volumes:
+      - ~/.config/memos:/var/opt/memos
+    environment:
+      - "MEMOS_UID=${UID}"
+      - "MEMOS_GID=${GID}"
+    #networks:
+    #  - ai-agent-lab
+
+#networks:
+#  ai-agent-lab:
+#    external: true
+#    name: ai-agent-lab
